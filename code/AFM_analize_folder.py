@@ -218,8 +218,6 @@ def minmax_db(datasets):
 
         points = pd.concat([min_df, max_df])
 
-        points
-
         points.to_csv(f'{a[:-4]}_min_max_ix({n}x{n}).csv', index = False)
         sub_mat_df.to_csv(f'{a[:-4]}_flattened_submat({n}x{n}).csv', index = False)
         

@@ -19,11 +19,14 @@ def folder_path():
             exeptions.append(path)
         elif '.idea' in path.split(os.sep):
             exeptions.append(path)
+        elif '.git' in path.split(os.sep):
+            exeptions.append(path)
     options = [i for i in path_to_folders if i not in exeptions]
     terminal_menu = TerminalMenu(options)
     menu_entry_index = terminal_menu.show()
     folder = options[menu_entry_index]
-    return folder
+    save_path = os.path.join(folder, 'output')
+    return folder, save_path
 
 def list_txt_files(folder):
     list_txt_files = []
@@ -40,5 +43,4 @@ def list_csv_files(folder):
         for file in files:
             if file.endswith('csv'):
                 list_csv_files.append(os.path.join(root, file))
-
     return list_csv_files
