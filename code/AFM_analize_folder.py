@@ -114,12 +114,12 @@ def find_files(directory,filetype):
                 files.append(directory+'/'+folder+filename)
     return files
 
-def autocorr_function(datasets):
+def autocorr_function(datasets, width_line):
     for a in datasets:
         df=pd.read_csv(a)
         df.head()
         print(a)
-        acf_df = get_acf(df = df, nlags = 256, series_no = 128, constant = 0.078, plot_acf = True)
+        acf_df = get_acf(df = df, nlags = 256, series_no = 128, constant = width_line, plot_acf = True)
         acf_df.to_csv((str(a)[:-3]+'_auto.csv'))
         plt.savefig(str(a)[:-3]+'autocorr_function.png', format='png', dpi=1200, bbox_inches='tight')
         #acf_df.to_csv(str(a)[:-3]+' autocorr function.csv', encoding = 'utf-8', index=False)
