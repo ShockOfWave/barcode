@@ -5,14 +5,12 @@
 
 import numpy as np
 import pandas as pd
-from ripser import Rips
 import matplotlib.pyplot as plt
 import gudhi
-import statsmodels.tsa.api as smt
 import statsmodels
 import warnings
 import os
-from code.Save_barcode_as_csv_2 import extract_list_from_raw_data
+from src.Save_barcode_as_csv_2 import extract_list_from_raw_data
 warnings.filterwarnings('ignore')
 
 def plot_acf_graph(acf_df_x, acf_df_y, ax_x, ax_y):
@@ -27,7 +25,6 @@ def plot_acf_graph(acf_df_x, acf_df_y, ax_x, ax_y):
     acf_df_x = acf_df_x.rename(columns = {'ACF' : 'Along x-direction'})
     acf_df_y = acf_df_y.rename(columns = {'ACF' : 'Along y-direction'})
 
-    #acf_df[['ACF']].plot(linewidth = 2.5, figsize = (8, 5), legend = False)
     plt.figure(figsize = (7, 5))
     plt.plot('ix', 'Along x-direction', data = acf_df_x, color = 'darkorange', linewidth = 2.5,)
     plt.plot('ix', 'Along y-direction', data = acf_df_y, color = 'royalblue', linewidth = 2.5,)
@@ -117,12 +114,10 @@ def find_files(directory,filetype):
 def autocorr_function(datasets, width_line):
     for a in datasets:
         df=pd.read_csv(a)
-        df.head()
         print(a)
         acf_df = get_acf(df = df, nlags = 256, series_no = 128, constant = width_line, plot_acf = True)
         acf_df.to_csv((str(a)[:-3]+'_auto.csv'))
         plt.savefig(str(a)[:-3]+'autocorr_function.png', format='png', dpi=1200, bbox_inches='tight')
-        #acf_df.to_csv(str(a)[:-3]+' autocorr function.csv', encoding = 'utf-8', index=False)
         
         print(df)
  
@@ -130,11 +125,9 @@ def persistance_db(datasets):
     for a in datasets:
         df=pd.read_csv(a)
         df.head()
-     
-        rips = Rips(maxdim=3)
-        diagrams = rips.fit_transform(df)
+
         X = df.to_numpy()
-        X
+
         gudhi.persistence_graphical_tools._gudhi_matplotlib_use_tex=False
         # Using default parameters. Change it as required 
         rips_complex = gudhi.RipsComplex(distance_matrix=X, max_edge_length=100.0) 		#max_edge_length=100, 250
@@ -143,9 +136,7 @@ def persistance_db(datasets):
         ans = extract_list_from_raw_data(diag)
         diag_df = pd.DataFrame(ans, columns=["Start", "End", "Length", "Homology group"])
         diag_df.to_csv((str(a)[:-4]+"diag_df_output.csv"))
-        #np.savetxt((str(a)[:-3]+'output_data.csv'), diag, delimiter=',', fmt='% s')
         gudhi.plot_persistence_barcode(diag,fontsize=18, legend=True, inf_delta=0.5)
-    	#inf_delta=0.1
         plt.xlabel('Sampling length, μm', fontsize = 16)
         plt.ylabel('Topological invariants', fontsize = 18)
         plt.xticks(fontsize = 16)

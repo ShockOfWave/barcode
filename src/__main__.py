@@ -1,6 +1,6 @@
-from code.logic import folder_path, list_txt_files, list_csv_files
-from code.convert import matrix_convert_save
-from code.AFM_analize_folder import minmax_db, autocorr_function, persistance_db
+from src.logic import folder_path, list_txt_files, list_csv_files
+from src.convert import matrix_convert_save
+from src.AFM_analize_folder import minmax_db, autocorr_function, persistance_db
 
 def main():
     width_line = float(input('Введите ширину строки(длина снимка/количество пикселей: '))

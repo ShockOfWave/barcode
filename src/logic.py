@@ -13,9 +13,9 @@ def folder_path():
             path_to_folders.append(os.path.join(root, dir))
     exeptions = []
     for path in path_to_folders:
-        if 'code' in path.split(os.sep):
+        if 'src' in path.split(os.sep):
             exeptions.append(path)
-        elif 'Code' in path.split(os.sep):
+        elif 'src' in path.split(os.sep):
             exeptions.append(path)
         elif '.idea' in path.split(os.sep):
             exeptions.append(path)
