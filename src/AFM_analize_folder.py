@@ -115,7 +115,7 @@ def autocorr_function(datasets, width_line):
     for a in datasets:
         df=pd.read_csv(a)
         print(a)
-        acf_df = get_acf(df = df, nlags = 256, series_no = 128, constant = width_line, plot_acf = True)
+        acf_df = get_acf(df = df, nlags = int(len(df)), series_no = int(len(df)/2), constant = width_line, plot_acf = True)
         acf_df.to_csv((str(a)[:-3]+'_auto.csv'))
         plt.savefig(str(a)[:-3]+'autocorr_function.png', format='png', dpi=1200, bbox_inches='tight')
         
@@ -136,14 +136,14 @@ def persistance_db(datasets):
         ans = extract_list_from_raw_data(diag)
         diag_df = pd.DataFrame(ans, columns=["Start", "End", "Length", "Homology group"])
         diag_df.to_csv((str(a)[:-4]+"diag_df_output.csv"))
-        gudhi.plot_persistence_barcode(diag,fontsize=18, legend=True, inf_delta=0.5)
+        gudhi.plot_persistence_barcode(diag,fontsize=18, legend=True, inf_delta=0.5, max_intervals=len(diag_df)+1)
         plt.xlabel('Sampling length, μm', fontsize = 16)
         plt.ylabel('Topological invariants', fontsize = 18)
         plt.xticks(fontsize = 16)
         plt.yticks(fontsize = 0)
         plt.savefig(str(a)[:-3]+'barcode.png', format='png', dpi=1200, bbox_inches='tight')
     
-        gudhi.plot_persistence_diagram(diag,fontsize=18,alpha=0.5,legend=True,inf_delta=0.2, greyblock=False)
+        gudhi.plot_persistence_diagram(diag,fontsize=18,alpha=0.5,legend=True,inf_delta=0.2, greyblock=False, max_intervals=len(diag_df)+1)
     
         plt.xlabel('Feature appearance, μm', fontsize = 18)
         plt.ylabel('Feature disappearance, μm', fontsize = 18)
