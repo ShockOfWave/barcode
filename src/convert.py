@@ -1,8 +1,9 @@
 import numpy as np
 import os
+from rich.progress import track
 
 def matrix_convert_save(dataset, save_path):
-    for file in dataset:
+    for file in track(dataset, description="[green]Processing..."):
         filik = open(file, "r")
         listik = []
         for line in filik:
@@ -30,7 +31,6 @@ def matrix_convert_save(dataset, save_path):
         else:
             os.mkdir(os.path.join(save_path, file_name))
         np.savetxt(os.path.join(save_path, file_name, (file_name + '.csv')), dfs_new, fmt='%s', delimiter=',')
-        print(f'Successfully converted ------- {file}')
 
 
 

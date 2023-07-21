@@ -21,6 +21,8 @@ def folder_path():
             exeptions.append(path)
         elif '.git' in path.split(os.sep):
             exeptions.append(path)
+        elif 'venv' in path.split(os.sep):
+            exeptions.append(path)
     options = [i for i in path_to_folders if i not in exeptions]
     terminal_menu = TerminalMenu(options)
     menu_entry_index = terminal_menu.show()

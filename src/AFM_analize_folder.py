@@ -1,16 +1,11 @@
-#Autocorrelation function
-#Persistance diagram
-#Barcode diagram
-#min_max
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import gudhi
-import statsmodels
+import statsmodels.api as sm
 import warnings
 import os
-from src.Save_barcode_as_csv_2 import extract_list_from_raw_data
+from rich.progress import track
 warnings.filterwarnings('ignore')
 
 def plot_acf_graph(acf_df_x, acf_df_y, ax_x, ax_y):
@@ -43,10 +38,10 @@ def get_acf(df, nlags, series_no, constant, plot_acf = False):
     val_y = df.set_index('DataLine').T.iloc[:, series_no].values
     ax_y = 'y'
     
-    auto_corr_x = statsmodels.tsa.stattools.acf(val_x,  
+    auto_corr_x = sm.tsa.stattools.acf(val_x,  
                                               nlags = nlags, qstat = False, 
                                               alpha = None,)
-    auto_corr_y = statsmodels.tsa.stattools.acf(val_y,  
+    auto_corr_y = sm.tsa.stattools.acf(val_y,  
                                               nlags = nlags, qstat = False, 
                                               alpha = None,)
     
@@ -112,25 +107,21 @@ def find_files(directory,filetype):
     return files
 
 def autocorr_function(datasets, width_line):
-    for a in datasets:
+    for a in track(datasets, description="[green]Processing..."):
         df=pd.read_csv(a)
-        print(a)
         acf_df = get_acf(df = df, nlags = int(len(df)), series_no = int(len(df)/2), constant = width_line, plot_acf = True)
         acf_df.to_csv((str(a)[:-3]+'_auto.csv'))
         plt.savefig(str(a)[:-3]+'autocorr_function.png', format='png', dpi=1200, bbox_inches='tight')
-        
-        print(df)
- 
-def persistance_db(datasets):
-    for a in datasets:
+         
+def persistance_db(datasets, max_edge_length):
+    for a in track(datasets, description="[green]Processing..."):
         df=pd.read_csv(a)
-        df.head()
 
         X = df.to_numpy()
 
         gudhi.persistence_graphical_tools._gudhi_matplotlib_use_tex=False
         # Using default parameters. Change it as required 
-        rips_complex = gudhi.RipsComplex(distance_matrix=X, max_edge_length=100.0) 		#max_edge_length=100, 250
+        rips_complex = gudhi.RipsComplex(distance_matrix=X, max_edge_length=max_edge_length) 		#max_edge_length=100, 250
         simplex_tree = rips_complex.create_simplex_tree(max_dimension=3)
         diag = simplex_tree.persistence(min_persistence=0)
         ans = extract_list_from_raw_data(diag)
@@ -157,7 +148,7 @@ def return_min_max_ix(m):
     return [min_ix[0], min_ix[1], max_ix[0], max_ix[1]]
         
 def minmax_db(datasets):
-    for a in datasets:
+    for a in track(datasets, description="[green]Processing..."):
         data = pd.read_csv(a, index_col = 'DataLine')
         n = 3
         rows_to_drop = data.shape[0] - int(data.shape[0] / n) * n
@@ -212,4 +203,10 @@ def minmax_db(datasets):
         points.to_csv(f'{a[:-4]}_min_max_ix({n}x{n}).csv', index = False)
         sub_mat_df.to_csv(f'{a[:-4]}_flattened_submat({n}x{n}).csv', index = False)
         
+def extract_list_from_raw_data(diagrams):
+  ans = []
+  for diagram in diagrams:
+    ans.append([diagram[1][0], diagram[1][1], abs(diagram[1][0] - diagram[1][1]), diagram[0]])
+
+  return ans
 
