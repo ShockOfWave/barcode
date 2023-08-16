@@ -38,13 +38,13 @@ As a result of the calculations, you will get images of a persistent barcode and
 
 <p align="center">
 
-![First image](images/barcode.png)
+![First image](images/barcode4github1.png)
 
 </p>
 
 <p align="center">
 
-![Second image](images/persistence_diagram.png)
+![Second image](images/diagram4github1.png)
 
 </p>
 

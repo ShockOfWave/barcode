@@ -12,7 +12,7 @@ def plot_acf_graph(acf_df_x, acf_df_y, ax_x, ax_y):
     
     plt.rc('font', size = 12)          # controls default text sizes
     plt.rc('axes', titlesize = 17)     # fontsize of the axes title
-    plt.rc('axes', labelsize = 15)    # fontsize of the x and y labels
+    plt.rc('axes', labelsize = 15)     # fontsize of the x and y labels
     plt.rc('xtick', labelsize = 15)    # fontsize of the tick labels
     plt.rc('ytick', labelsize = 15)    # fontsize of the tick labels
     plt.rc('legend', fontsize = 12)    # legend fontsize
@@ -21,14 +21,14 @@ def plot_acf_graph(acf_df_x, acf_df_y, ax_x, ax_y):
     acf_df_y = acf_df_y.rename(columns = {'ACF' : 'Along y-direction'})
 
     plt.figure(figsize = (7, 5))
-    plt.plot('ix', 'Along x-direction', data = acf_df_x, color = 'darkorange', linewidth = 2.5,)
-    plt.plot('ix', 'Along y-direction', data = acf_df_y, color = 'royalblue', linewidth = 2.5,)
-    plt.axhline(y = 0, xmin = 0, xmax = 1, linestyle = '--', color = 'black');
-    plt.axhline(y = 0.1, xmin = 0, xmax = 1, linestyle = '--', color = 'brown');
+    plt.plot('ix', 'Along x-direction', data = acf_df_x, color = 'darkorange', linewidth = 2.5)
+    plt.plot('ix', 'Along y-direction', data = acf_df_y, color = 'royalblue', linewidth = 2.5)
+    plt.axhline(y = 0, xmin = 0, xmax = 1, linestyle = '--', color = 'black')
+    plt.axhline(y = 0.1, xmin = 0, xmax = 1, linestyle = '--', color = 'brown')
     plt.title(f"Autocorrelation along {ax_x}- and {ax_y}-direction")
     plt.legend()
     plt.xlabel('Sampling length, μm')
-    plt.ylabel('Autocorrelation function, C(τ)');
+    plt.ylabel('Autocorrelation function, C(τ)')
 
 def get_acf(df, nlags, series_no, constant, plot_acf = False):
 
@@ -40,10 +40,10 @@ def get_acf(df, nlags, series_no, constant, plot_acf = False):
     
     auto_corr_x = sm.tsa.stattools.acf(val_x,  
                                               nlags = nlags, qstat = False, 
-                                              alpha = None,)
+                                              alpha = None)
     auto_corr_y = sm.tsa.stattools.acf(val_y,  
                                               nlags = nlags, qstat = False, 
-                                              alpha = None,)
+                                              alpha = None)
     
     acf_df_x = pd.DataFrame({'z' : val_x, 
                            'ACF' : auto_corr_x, 
@@ -112,6 +112,8 @@ def autocorr_function(datasets, width_line):
         acf_df = get_acf(df = df, nlags = int(len(df)), series_no = int(len(df)/2), constant = width_line, plot_acf = True)
         acf_df.to_csv((str(a)[:-3]+'_auto.csv'))
         plt.savefig(str(a)[:-3]+'autocorr_function.png', format='png', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'autocorr_function.svg', format='svg', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'autocorr_function.pdf', format='pdf', dpi=1200, bbox_inches='tight')
          
 def persistance_db(datasets, max_edge_length):
     for a in track(datasets, description="[green]Processing..."):
@@ -128,19 +130,23 @@ def persistance_db(datasets, max_edge_length):
         diag_df = pd.DataFrame(ans, columns=["Start", "End", "Length", "Homology group"])
         diag_df.to_csv((str(a)[:-4]+"diag_df_output.csv"))
         gudhi.plot_persistence_barcode(diag,fontsize=18, legend=True, inf_delta=0.5, max_intervals=len(diag_df)+1)
-        plt.xlabel('Sampling length, μm', fontsize = 16)
+        plt.xlabel('Sampling length, nm', fontsize = 16)
         plt.ylabel('Topological invariants', fontsize = 18)
         plt.xticks(fontsize = 16)
         plt.yticks(fontsize = 0)
         plt.savefig(str(a)[:-3]+'barcode.png', format='png', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'barcode.svg', format='svg', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'barcode.pdf', format='pdf', dpi=1200, bbox_inches='tight')
     
         gudhi.plot_persistence_diagram(diag,fontsize=18,alpha=0.5,legend=True,inf_delta=0.2, greyblock=False, max_intervals=len(diag_df)+1)
     
-        plt.xlabel('Feature appearance, μm', fontsize = 18)
-        plt.ylabel('Feature disappearance, μm', fontsize = 18)
+        plt.xlabel('Feature appearance, nm', fontsize = 18)
+        plt.ylabel('Feature disappearance, nm', fontsize = 18)
         plt.xticks(fontsize = 16)
         plt.yticks(fontsize = 16)
         plt.savefig(str(a)[:-3]+'persistence_diagram.png', format='png', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'persistence_diagram.svg', format='svg', dpi=1200, bbox_inches='tight')
+        plt.savefig(str(a)[:-3]+'persistence_diagram.pdf', format='pdf', dpi=1200, bbox_inches='tight')
 
 def return_min_max_ix(m):
     min_ix = np.unravel_index(m.argmin(), m.shape)
