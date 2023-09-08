@@ -82,6 +82,22 @@ For LaTeX:
 
 The authors are more than happy if you refer the following works:
 
+```tex
+@article{Zhukov2023,
+  doi = {10.1021/acsaenm.3c00233},
+  url = {https://doi.org/10.1021/acsaenm.3c00233},
+  year = {2023},
+  month = aug,
+  publisher = {American Chemical Society ({ACS})},
+  volume = {1},
+  number = {8},
+  pages = {2084--2091},
+  author = {Mikhail V. Zhukov and Aleksandr S. Aglikov and Mirnah Sabboukh and Dmitry A. Kozodaev and Timur A. Aliev and Sviatlana A. Ulasevich and Michael Nosonovsky and Ekaterina V. Skorb},
+  title = {{AFM}-Topological Data Analysis of Brass after Ultrasonic Surface Modification},
+  journal = {{ACS} Applied Engineering Materials}
+}
+```
+
 > Mikhail V. Zhukov, Aleksandr S. Aglikov, Mirnah Sabboukh, Dmitry A. Kozodaev, Timur A. Aliev,
 Sviatlana A. Ulasevich, Michael Nosonovsky, Ekaterina V. Skorb, "AFM-Topological Data Analysis of Brass after Ultrasonic Surface Modification", [https://doi.org/10.1021/acsaenm.3c00233](https://doi.org/10.1021/acsaenm.3c00233)
 
