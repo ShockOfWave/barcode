@@ -212,3 +212,14 @@ ENV/
 /site
 
 # End of https://www.gitignore.io/api/macos,linux,django,python,pycharm
+
+# uv files
+.python-version
+uv.lock
+
+# ruff files
+.ruff_cache
+
+# test development files
+test_dev
+.pytest_cache

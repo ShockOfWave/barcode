@@ -1,0 +1,31 @@
+[project]
+name = "barcode"
+version = "0.1.0"
+description = "The project for calculating TDA data using AFM data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "gudhi>=3.11.0",
+    "matplotlib>=3.10.1",
+    "numpy>=2.2.3",
+    "pandas>=2.2.3",
+    "rich>=13.9.4",
+    "ripser>=0.6.12",
+    "ruff>=0.9.10",
+    "simple-term-menu>=1.6.6",
+    "statsmodels>=0.14.4",
+]
+
+[tool.ruff]
+line-length = 101
+
+[tool.ruff.lint]
+select = ["UP", "E", "F", "B", "SIM", "I", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]

@@ -6,22 +6,18 @@
 
 The script (program) presented below is designed to calculate Vietoris-Rips complexes and Betti numbers (topological data analysis) using in general [GUDHI](https://gudhi.inria.fr/) library. In the Infochemistry Scientific Center ([ISC](https://infochemistry.ru/)), this approach is applied not to natural images, but to topography data obtained using atomic force and scanning electron microscopy. You can find out more about the use of TDA for real objects from material and surface sciences in the articles by Skorb, Nosonovsky, Zhukov, Aglikov, and Aliev. Links will be added later, as articles are published.
 
-## Dependencies
-To run code need to install [git](https://git-scm.com/) and [conda](https://www.anaconda.com/) package manager.
-
 ## Installation
 
 ```bash
 git clone https://github.com/ShockOfWave/barcode.git
 cd barcode
-conda env create -f environment.yml
-conda activate barcode
+uv sync
 ```
 
 ## Usage
 - To run code put the data in project directory.
 ```bash
-python -m src
+uv run -m src
 ```
 - Select folder with data in terminal
 - Output data will be in folder output in directory with data
