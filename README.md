@@ -1,6 +1,14 @@
 
 # Barcode project
 
+![GitHub](https://img.shields.io/github/license/ShockOfWave/barcode)
+![GitHub last commit](https://img.shields.io/github/last-commit/ShockOfWave/barcode)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/ShockOfWave/barcode)
+![contributors](https://img.shields.io/github/contributors/ShockOfWave/barcode) 
+![codesize](https://img.shields.io/github/languages/code-size/ShockOfWave/barcode)
+![GitHub repo size](https://img.shields.io/github/repo-size/ShockOfWave/barcode)
+![GitHub top language](https://img.shields.io/github/languages/top/ShockOfWave/barcode)
+![GitHub language count](https://img.shields.io/github/languages/count/ShockOfWave/barcode)
 
 ## Intro
 
