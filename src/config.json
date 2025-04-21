@@ -1,3 +1,0 @@
-{
-    "excluded_dirs": ["src", ".idea", ".git", ".venv", "venv", ".ruff_cache", "images", "test", ".pytest_cache"]
-}

@@ -223,3 +223,7 @@ uv.lock
 # test development files
 test_dev
 .pytest_cache
+
+# data
+/data
+/test_files

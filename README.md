@@ -25,7 +25,7 @@ uv sync
 ## Usage
 - To run code put the data in project directory.
 ```bash
-uv run -m src
+uv run -m afm_tda_tools --data_path <path_to_data> --save_path <path_to_save>
 ```
 - Select folder with data in terminal
 - Output data will be in folder output in directory with data
