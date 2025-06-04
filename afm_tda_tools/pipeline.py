@@ -13,6 +13,13 @@ to the specified save directory.
 """
 
 import os
+import shutil
+from typing import Optional
+
+try:
+    import boto3
+except Exception:  # pragma: no cover - boto3 is optional
+    boto3 = None
 
 from afm_tda_tools.analyzers import (
     AutocorrelationAnalyzer,
@@ -21,6 +28,59 @@ from afm_tda_tools.analyzers import (
     PersistenceAnalyzer,
 )
 from afm_tda_tools.data import AnalysisData, txt_to_csv_folder
+
+
+def package_results(save_dir: str) -> str:
+    """Compress the output directory into a ``.zip`` archive.
+
+    Parameters
+    ----------
+    save_dir : str
+        Directory containing pipeline results.
+
+    Returns
+    -------
+    str
+        Path to the created archive.
+    """
+    archive_path = shutil.make_archive(save_dir, "zip", root_dir=save_dir)
+    return archive_path
+
+
+def upload_results_to_s3(
+    save_dir: str,
+    bucket: str,
+    prefix: str = "results",
+    client: Optional["boto3.client"] = None,
+) -> str:
+    """Upload zipped results to an S3 bucket.
+
+    Parameters
+    ----------
+    save_dir : str
+        Directory to compress and upload.
+    bucket : str
+        Target S3 bucket name.
+    prefix : str, optional
+        Key prefix in the bucket.
+    client : boto3.client, optional
+        Pre-configured boto3 client. One will be created if ``None``.
+
+    Returns
+    -------
+    str
+        ``s3://`` URL of the uploaded archive.
+    """
+    if boto3 is None:
+        raise RuntimeError("boto3 is required for S3 uploads")
+
+    archive = package_results(save_dir)
+    if client is None:
+        client = boto3.client("s3")
+
+    key = f"{prefix}/{os.path.basename(archive)}"
+    client.upload_file(archive, bucket, key)
+    return f"s3://{bucket}/{key}"
 
 
 class AnalysisPipeline:
@@ -91,7 +151,14 @@ class AnalysisPipeline:
         self.delta = delta
         self.order = order
 
-    def run(self):
+    def run(
+        self,
+        *,
+        package: bool = False,
+        upload_s3: bool = False,
+        s3_bucket: str | None = None,
+        s3_prefix: str = "results",
+    ) -> str:
         """
         Execute the full analysis pipeline.
 
@@ -104,9 +171,24 @@ class AnalysisPipeline:
           5. Run min–max block-wise analysis.
           6. Compute and save bottleneck and Wasserstein distances.
 
+        Parameters
+        ----------
+        package : bool, default False
+            If ``True``, the output directory is zipped and the path to the
+            archive is returned.
+        upload_s3 : bool, default False
+            When ``True``, results are uploaded to the S3 bucket specified by
+            ``s3_bucket`` and the ``s3://`` URL is returned.
+        s3_bucket : str, optional
+            Target S3 bucket for uploads.
+        s3_prefix : str, default "results"
+            Key prefix used when uploading to S3.
+
         Returns
         -------
-        None
+        str
+            Path to the results directory, the created archive, or the uploaded
+            ``s3://`` URL depending on the provided options.
         """
         # Step 0: preprocess raw text files
         txt_to_csv_folder(self.data_path, self.save_path)
@@ -136,3 +218,11 @@ class AnalysisPipeline:
         self.bottleneck_analyzer.save_results(save_dir)
 
         print("Pipeline finished successfully.")
+
+        if upload_s3:
+            if not s3_bucket:
+                raise ValueError("'s3_bucket' must be provided when 'upload_s3' is True")
+            return upload_results_to_s3(save_dir, bucket=s3_bucket, prefix=s3_prefix)
+        if package:
+            return package_results(save_dir)
+        return save_dir

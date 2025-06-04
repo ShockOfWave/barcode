@@ -32,6 +32,31 @@ uv run -m afm_tda_tools --data_path <path_to_data> --save_path <path_to_save>
 
 The program will ask you for AFM data resolution and the maximum length of the Vietoris-Rips complex. We do not recommend that you choose the maximum length of the Vietoris-Rips complex greater than 200. Calculations can take a considerable amount of time.
 
+### REST API
+
+The repository also provides a small FastAPI server (`fastapi_app.py`).
+Clients can send a POST request to `/run` with pipeline options. When
+`package_results` or `upload_to_s3` is enabled, the response will contain
+either the path to a zipped archive or the S3 URL of the uploaded results.
+
+Example request:
+
+```bash
+curl -X POST http://localhost:8000/run \
+     -H "Content-Type: application/json" \
+     -d '{
+           "data_path": "./data",
+           "save_path": "./out",
+           "package_results": true
+         }'
+```
+
+Response:
+
+```json
+{"result_location": "./out.zip"}
+```
+
 ## Output example
 
 ### Description of results
