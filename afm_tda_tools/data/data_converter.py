@@ -56,6 +56,8 @@ def txt_to_csv_folder(raw_data_path, processed_path, multiply_const=1e9):
             * multiply_const
         )
 
+        print(df.head())
+
         # Insert DataLine index and rename columns
         df.insert(0, "DataLine", range(len(df)))
         df.columns = ["DataLine"] + [f"Pos = {i}" for i in range(df.shape[1] - 1)]

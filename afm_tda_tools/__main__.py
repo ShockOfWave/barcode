@@ -120,6 +120,7 @@ def main():
         matrix_size=args.matrix_size,
         delta=args.delta_bottleneck,
         order=args.order_wasserstein,
+        multiply_const=args.multiply_const,
     )
     pipeline.run()
 

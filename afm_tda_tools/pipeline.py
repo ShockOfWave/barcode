@@ -66,6 +66,7 @@ class AnalysisPipeline:
         matrix_size=3,
         delta=0.01,
         order=1.0,
+        multiply_const=1e9,
     ):
         self.data_path = data_path
         self.save_path = save_path
@@ -74,6 +75,7 @@ class AnalysisPipeline:
             if exclude_patterns is not None
             else ["(3x3).csv", "_auto.csv", "output.csv"]
         )
+        self.multiply_const = multiply_const
 
         # Shared container for intermediate and final results
         self.data_container = AnalysisData()
@@ -109,7 +111,7 @@ class AnalysisPipeline:
         None
         """
         # Step 0: preprocess raw text files
-        txt_to_csv_folder(self.data_path, self.save_path)
+        txt_to_csv_folder(self.data_path, self.save_path, multiply_const=self.multiply_const)
 
         # Step 1: collect CSV files for analysis
         files = self.acf_analyzer.get_files(self.save_path, exclude_patterns=self.exclude_patterns)
