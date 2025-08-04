@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include pyproject.toml
+include uv.lock
+recursive-include afm_tda_tools/data *
+recursive-include images *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co] 

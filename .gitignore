@@ -213,10 +213,6 @@ ENV/
 
 # End of https://www.gitignore.io/api/macos,linux,django,python,pycharm
 
-# uv files
-.python-version
-uv.lock
-
 # ruff files
 .ruff_cache
 
@@ -227,3 +223,7 @@ test_dev
 # data
 /data
 /test_files
+
+# slurm
+run.sh
+slurm*

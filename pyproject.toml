@@ -1,9 +1,40 @@
 [project]
-name = "barcode"
+name = "afm-tda-tools"
 version = "0.1.0"
-description = "The project for calculating TDA data using AFM data"
+description = "Topological Data Analysis tools for AFM data processing"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "ShockOfWave", email = "shockofwave90@gmail.com"}
+]
+maintainers = [
+    {name = "ShockOfWave", email = "shockofwave90@gmail.com"}
+]
+keywords = [
+    "topological-data-analysis",
+    "afm",
+    "atomic-force-microscopy", 
+    "persistent-homology",
+    "vietoris-rips",
+    "betti-numbers",
+    "gudhi",
+    "materials-science",
+    "surface-analysis"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry", 
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "gudhi>=3.11.0",
     "matplotlib>=3.10.1",
@@ -16,6 +47,15 @@ dependencies = [
     "statsmodels>=0.14.4",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ShockOfWave/barcode"
+Repository = "https://github.com/ShockOfWave/barcode"
+Documentation = "https://github.com/ShockOfWave/barcode#readme"
+"Bug Tracker" = "https://github.com/ShockOfWave/barcode/issues"
+
+[project.scripts]
+afm-tda-tools = "afm_tda_tools.__main__:main"
+
 [tool.ruff]
 line-length = 101
 
@@ -27,5 +67,12 @@ convention = "numpy"
 
 [dependency-groups]
 dev = [
+    "build>=1.2.2.post1",
     "pytest>=8.3.5",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "twine>=6.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "ruff>=0.9.10",
 ]

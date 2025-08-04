@@ -1,38 +1,43 @@
 """
-Module defining the analysis pipeline for AFM data processing.
+High level analysis pipeline.
 
-This pipeline handles preprocessing of raw `.txt` files into CSV,
-followed by sequential execution of:
-  - autocorrelation analysis
-  - persistence homology analysis
-  - min–max analysis
-  - bottleneck and Wasserstein distance computation
+The :class:`AnalysisPipeline` orchestrates the end‑to‑end workflow of the
+AFM topological data analysis.  It performs the following steps:
 
-Results are stored in a shared AnalysisData container and exported
-to the specified save directory.
+1. Convert raw `.txt` files into CSV via :func:`afm_tda_tools.data.data_converter.txt_to_csv_folder`.
+2. Collect processed CSV files, excluding any patterns supplied by the user.
+3. Run autocorrelation analysis (compute + save).
+4. Run persistence homology analysis (compute + save).
+5. Run min–max block‑wise analysis (compute + save).
+6. Compute bottleneck and Wasserstein distances and save the resulting
+   matrices.
+
+The pipeline leverages the compute/save separation implemented in each
+analyzer.  While the CLI uses the default behaviour of saving results
+locally, server applications can reuse the individual analyzers and
+their compute methods to obtain raw results without writing to disk.
 """
 
-import os
+from __future__ import annotations
 
-from afm_tda_tools.analyzers import (
-    AutocorrelationAnalyzer,
-    BottleneckAnalyzer,
-    MinMaxAnalyzer,
-    PersistenceAnalyzer,
-)
-from afm_tda_tools.data import AnalysisData, txt_to_csv_folder
+import os
+from typing import List, Optional
+
+from afm_tda_tools.analyzers.autocorrelation import AutocorrelationAnalyzer
+from afm_tda_tools.analyzers.persistence import PersistenceAnalyzer
+from afm_tda_tools.analyzers.min_max import MinMaxAnalyzer
+from afm_tda_tools.analyzers.bottleneck import BottleneckAnalyzer
+from afm_tda_tools.data.data import AnalysisData
+from afm_tda_tools.data.data_converter import txt_to_csv_folder
 
 
 class AnalysisPipeline:
     """
-    Orchestrates the full analysis workflow on AFM datasets.
+    Orchestrate the full analysis workflow on AFM datasets.
 
-    This class runs a sequence of analyzers on raw AFM data:
-      1. Convert raw `.txt` files to CSV.
-      2. Autocorrelation analysis.
-      3. Persistence homology analysis.
-      4. Min–max block-wise analysis.
-      5. Pairwise bottleneck and Wasserstein distance computation.
+    This class runs a sequence of analyzers on raw AFM data: conversion
+    from `.txt` to `.csv`, autocorrelation analysis, persistence
+    analysis, min–max analysis and finally pairwise diagram distances.
 
     Parameters
     ----------
@@ -43,49 +48,50 @@ class AnalysisPipeline:
         will be saved.
     exclude_patterns : list of str, optional
         Filename suffixes to exclude from analysis (default:
-        ["(3x3).csv", "_auto.csv", "output.csv"]).
-    width_line : float, default 0.1
-        Sampling interval (µm) for autocorrelation lag scaling.
-    max_edge_length : float, default 1.0
-        Maximum edge length for Rips complex construction.
-    matrix_size : int, default 3
-        Block size for min–max analysis.
-    delta : float, default 0.01
-        Tolerance for bottleneck distance computation.
-    order : float, default 1.0
-        Order for Wasserstein distance computation.
+        ``["(3x3).csv", "_auto.csv", "output.csv"]``).
+    width_line : float, optional
+        Sampling interval (µm) for autocorrelation lag scaling.  Default
+        is ``0.1``.
+    max_edge_length : float, optional
+        Maximum edge length for Rips complex construction.  Default is
+        ``1.0``.
+    matrix_size : int, optional
+        Block size for min–max analysis.  Default is ``3``.
+    delta : float, optional
+        Tolerance for bottleneck distance computation.  Default is
+        ``0.01``.
+    order : float, optional
+        Order for Wasserstein distance computation.  Default is ``1.0``.
+    multiply_const : float, optional
+        Scaling factor to apply to raw data values during preprocessing.
+        Default is ``1e9``.
     """
 
     def __init__(
         self,
-        data_path,
-        save_path,
-        exclude_patterns=None,
-        width_line=0.1,
-        max_edge_length=1.0,
-        matrix_size=3,
-        delta=0.01,
-        order=1.0,
-        multiply_const=1e9,
-    ):
+        data_path: str,
+        save_path: str,
+        exclude_patterns: Optional[List[str]] = None,
+        width_line: float = 0.1,
+        max_edge_length: float = 1.0,
+        matrix_size: int = 3,
+        delta: float = 0.01,
+        order: float = 1.0,
+        multiply_const: float = 1e9,
+    ) -> None:
         self.data_path = data_path
         self.save_path = save_path
         self.exclude_patterns = (
-            exclude_patterns
-            if exclude_patterns is not None
-            else ["(3x3).csv", "_auto.csv", "output.csv"]
+            exclude_patterns if exclude_patterns is not None else ["(3x3).csv", "_auto.csv", "output.csv"]
         )
         self.multiply_const = multiply_const
-
         # Shared container for intermediate and final results
         self.data_container = AnalysisData()
-
         # Initialize analyzers with the shared data container
         self.acf_analyzer = AutocorrelationAnalyzer(self.data_container)
         self.persistence_analyzer = PersistenceAnalyzer(self.data_container)
         self.minmax_analyzer = MinMaxAnalyzer(self.data_container)
         self.bottleneck_analyzer = BottleneckAnalyzer(self.data_container)
-
         # Default parameters for each analysis step
         self.width_line = width_line
         self.max_edge_length = max_edge_length
@@ -93,48 +99,33 @@ class AnalysisPipeline:
         self.delta = delta
         self.order = order
 
-    def run(self):
-        """
-        Execute the full analysis pipeline.
-
-        This method performs the following steps in order:
-          1. Preprocess raw `.txt` files into CSV.
-          2. Collect processed CSV files, excluding any matching
-             `exclude_patterns`.
-          3. Run autocorrelation analysis.
-          4. Run persistence homology analysis.
-          5. Run min–max block-wise analysis.
-          6. Compute and save bottleneck and Wasserstein distances.
-
-        Returns
-        -------
-        None
-        """
-        # Step 0: preprocess raw text files
-        txt_to_csv_folder(self.data_path, self.save_path, multiply_const=self.multiply_const)
-
-        # Step 1: collect CSV files for analysis
-        files = self.acf_analyzer.get_files(self.save_path, exclude_patterns=self.exclude_patterns)
-
-        # Step 2: autocorrelation
+    def run(self) -> None:
+        """Execute the full analysis pipeline."""
+        # Step 1: collect files for analysis (both .txt and .csv)
+        files = []
+        for root, _, filenames in os.walk(self.data_path):
+            for filename in filenames:
+                if filename.endswith(('.txt', '.csv')):
+                    file_path = os.path.join(root, filename)
+                    # Check if file should be excluded
+                    if not any(filename.endswith(pattern) for pattern in self.exclude_patterns):
+                        files.append(file_path)
+        
+        if not files:
+            print("No files found for analysis.")
+            return
+        
+        # Step 2: autocorrelation (compute + save)
         self.acf_analyzer.analyze(files, width_line=self.width_line)
-
-        # Step 3: persistence diagrams and plots
+        # Step 3: persistence diagrams (compute + save)
         self.persistence_analyzer.analyze(files, max_edge_length=self.max_edge_length)
-
-        # Step 4: min–max block-wise analysis
+        # Step 4: min–max block‑wise analysis (compute + save)
         self.minmax_analyzer.analyze(files, matrix_size=self.matrix_size)
-
-        # Step 5: bottleneck and Wasserstein distances
+        # Step 5: bottleneck and Wasserstein distances (compute + save)
         self.bottleneck_analyzer.analyze(
             files,
             persistence_analyzer=self.persistence_analyzer,
             delta=self.delta,
             order=self.order,
         )
-
-        # Step 6: save bottleneck analysis results
-        save_dir = os.path.join(self.save_path)
-        self.bottleneck_analyzer.save_results(save_dir)
-
         print("Pipeline finished successfully.")

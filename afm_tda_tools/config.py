@@ -1,9 +1,12 @@
 """
-Module for centralized Matplotlib styling configuration.
+Centralised Matplotlib styling configuration.
 
-This module defines `MatplotlibConfig`, a simple utility to set
-consistent font and label sizes across all Matplotlib plots.
+The class :class:`MatplotlibConfig` encapsulates default font sizes and
+applies them to Matplotlib's rcParams.  This is preserved from the
+original project to ensure consistent aesthetics across plots.
 """
+
+from __future__ import annotations
 
 import matplotlib.pyplot as plt
 
@@ -13,46 +16,18 @@ class MatplotlibConfig:
     Configuration for Matplotlib plot aesthetics.
 
     Provides default size settings for fonts, axis titles, axis labels,
-    tick labels, and legend text, and applies them to Matplotlib rcParams.
-
-    Attributes
-    ----------
-    font_size : int
-        Base font size for plot text.
-    axes_title_size : int
-        Font size for axis titles.
-    axes_label_size : int
-        Font size for axis labels.
-    tick_label_size : int
-        Font size for tick labels on both axes.
-    legend_size : int
-        Font size for legend text.
+    tick labels and legend text, and applies them to Matplotlib rcParams.
     """
 
-    def __init__(self):
-        """
-        Initialize default plot size parameters.
-
-        Sets sensible defaults for fonts, titles, labels, ticks, and legends.
-        """
+    def __init__(self) -> None:
         self.font_size = 12
         self.axes_title_size = 17
         self.axes_label_size = 15
         self.tick_label_size = 15
         self.legend_size = 12
 
-    def apply(self):
-        """
-        Apply the configured sizes to Matplotlib rcParams.
-
-        Modifies the following rcParams keys:
-        - "font.size"
-        - "axes.titlesize"
-        - "axes.labelsize"
-        - "xtick.labelsize"
-        - "ytick.labelsize"
-        - "legend.fontsize"
-        """
+    def apply(self) -> None:
+        """Apply the configured sizes to Matplotlib rcParams."""
         plt.rc("font", size=self.font_size)
         plt.rc("axes", titlesize=self.axes_title_size)
         plt.rc("axes", labelsize=self.axes_label_size)

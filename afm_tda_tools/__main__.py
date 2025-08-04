@@ -1,58 +1,43 @@
 """
-Command‐line interface for the AFM data analysis pipeline.
+Command line interface for the AFM data analysis pipeline.
 
 This script provides a CLI entry point for preprocessing raw AFM
-`.txt` files, running a sequence of analyses (autocorrelation,
-persistence homology, min–max, bottleneck and Wasserstein distances),
-and saving results to the specified directory.
+``.txt`` files, running a sequence of analyses (autocorrelation,
+persistence homology, min–max and diagram distances), and saving
+results to the specified directory.  The CLI preserves the argument
+structure of the original project for backwards compatibility.
 
-Usage
------
-$ python -m afm_analyze_tools.__main__ \
+Example
+-------
+```
+python -m afm_tda_tools \
     --data-path /path/to/raw_txt \
     --save-path /path/to/output_dir \
-    [options]
-
-Options
--------
--d, --data-path TEXT
-    Path to the directory containing raw `.txt` files.
--s, --save-path TEXT
-    Path to the directory where all processed CSV and analysis
-    results will be saved.
--w, --width-line FLOAT
-    Sampling interval for autocorrelation lag axis (same units as
-    DataLine). Default: 0.0196.
--e, --max-edge-length FLOAT
-    Maximum edge length threshold for RipsComplex. Default: 100.
--m, --matrix-size INTEGER
-    Block size `n` for the min–max analysis (n × n). Default: 3.
--b, --delta-bottleneck FLOAT
-    Tolerance parameter for bottleneck distance. Default: 0.01.
--o, --order-wasserstein FLOAT
-    Order parameter for Wasserstein distance. Default: 1.0.
--c, --multiply-const FLOAT
-    Scaling factor to multiply raw data values (e.g., to convert
-    units). Default: 1e9.
--x, --exclude TEXT [TEXT ...]
-    List of filename suffixes to exclude from analysis. Default:
-    ["(3x3).csv", "_auto.csv", "output.csv"].
+    --width-line 0.02 \
+    --max-edge-length 100 \
+    --matrix-size 3 \
+    --delta-bottleneck 0.01 \
+    --order-wasserstein 1.0 \
+    --multiply-const 1e9
+```
 """
+
+from __future__ import annotations
 
 import argparse
 
 from afm_tda_tools.pipeline import AnalysisPipeline
 
 
-def main():
+def main() -> None:
     """
     Parse CLI arguments and execute the AFM analysis pipeline.
 
     The pipeline will:
-      1. Preprocess raw `.txt` files into CSV.
+      1. Preprocess raw ``.txt`` files into CSV.
       2. Run autocorrelation analysis.
       3. Compute persistence homology diagrams and plots.
-      4. Perform min–max block-wise analysis.
+      4. Perform min–max block‑wise analysis.
       5. Compute bottleneck and Wasserstein distance matrices.
       6. Save all results under the specified output directory.
     """
@@ -108,9 +93,7 @@ def main():
         default=["(3x3).csv", "_auto.csv", "output.csv"],
         help="Filename suffixes to exclude from analysis.",
     )
-
     args = parser.parse_args()
-
     pipeline = AnalysisPipeline(
         data_path=args.data_path,
         save_path=args.save_path,

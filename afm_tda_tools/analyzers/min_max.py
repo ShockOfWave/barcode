@@ -1,66 +1,206 @@
 """
-Module for local minima and maxima analysis on matrix data.
+Local minima and maxima analysis tools.
 
-This module defines `MinMaxAnalyzer`, which splits each input CSV
-matrix into smaller n×n blocks, identifies local minimum and maximum
-positions within each block, aggregates the counts of these extrema
-across the entire matrix, and saves both the flattened submatrix data
-and the extrema index counts.
+This module defines the :class:`MinMaxAnalyzer`, which splits each
+input CSV matrix into smaller blocks, identifies local minima and maxima
+within each block and aggregates counts of these extrema across the
+entire matrix.  The API exposes a compute method that returns the
+aggregated DataFrame and the flattened submatrices, and a save method
+that writes results to disk.  This decoupling makes the computation
+usable outside of CLI scripts.
 """
 
-import os
+from __future__ import annotations
 
-import numpy as np
+import os
 import pandas as pd
+import numpy as np
+from typing import List, Optional, Tuple
 from rich.progress import track
 
 from .base import Analyzer
 
 
-class MinMaxAnalyzer(Analyzer):
+def _convert_data_to_expected_format(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Analyzer for finding local minima and maxima in submatrices.
-
-    This analyzer reads each CSV file as a square matrix (dropping rows
-    if necessary to make it divisible by `matrix_size`), splits the
-    matrix into non-overlapping `matrix_size`×`matrix_size` blocks,
-    locates the min and max indices within each block, aggregates the
-    counts of these indices, and saves both the index counts and the
-    flattened submatrix data.
-
+    Преобразует матрицу данных в формат, ожидаемый min-max анализатором.
+    
     Parameters
     ----------
-    data_container : AnalysisData, optional
-        Container for storing analysis outputs. If None, a new
-        `AnalysisData` instance is created.
+    df : pd.DataFrame
+        Исходная матрица данных
+        
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame с индексом DataLine
+    """
+    # Если данные уже в нужном формате, возвращаем как есть
+    if df.index.name == 'DataLine' or 'DataLine' in df.columns:
+        return df
+    
+    # Преобразуем матрицу в нужный формат
+    result_df = df.copy()
+    result_df.index.name = 'DataLine'
+    
+    return result_df
+
+
+class MinMaxAnalyzer(Analyzer):
+    """
+    Min-max analyzer for AFM data.
+
+    This analyzer finds local minima and maxima in AFM height data by
+    dividing the data into submatrices and identifying extrema within
+    each block. It provides information about the distribution of
+    surface features.
+
+    The analysis helps characterize surface roughness and identify
+    patterns in the height distribution.
+
+    Attributes
+    ----------
+    data : object, optional
+        Shared data container for storing results.
+    plt_config : object
+        Matplotlib configuration object for consistent plotting.
     """
 
-    def __init__(self, data_container=None):
+    def __init__(self, data_container: Optional[object] = None) -> None:
         super().__init__(data_container)
 
-    def analyze(self, datasets, matrix_size=3):
+    def compute(self, file_path: str, matrix_size: int = 3) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
-        Process a list of CSV datasets for min/max analysis.
+        Compute min/max analysis for a single dataset.
 
-        Iterates over each file path in `datasets`, invoking the
-        internal `_process_minmax` method with the specified block size.
+        Parameters
+        ----------
+        file_path : str
+            Path to the CSV or TXT file to analyze.
+        matrix_size : int, optional
+            Size of the submatrix blocks to analyze. Default is 3.
+
+        Returns
+        -------
+        tuple
+            A tuple ``(agg_points, sub_mat_df)`` where ``agg_points`` is a
+            DataFrame with columns ``r``, ``c``, ``X3`` and ``type``
+            describing the counts of minima and maxima positions, and
+            ``sub_mat_df`` contains the flattened submatrices.  Both
+            DataFrames are stored in the shared data container.
+        """
+        # Определяем формат файла и читаем данные
+        if file_path.endswith('.txt'):
+            # Для .txt файлов читаем как матрицу
+            try:
+                # Пропускаем комментарии и читаем данные
+                data = []
+                with open(file_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            # Разбиваем по табуляции или пробелам
+                            values = line.split()
+                            if values:
+                                data.append([float(v) for v in values])
+                
+                if not data:
+                    raise ValueError("No valid data found in file")
+                
+                df = pd.DataFrame(data)
+            except Exception as e:
+                raise ValueError(f"Error reading TXT file: {e}")
+        else:
+            # Для CSV файлов используем стандартное чтение
+            df = pd.read_csv(file_path)
+        
+        # Преобразуем данные в нужный формат
+        data = _convert_data_to_expected_format(df)
+        
+        # Determine rows to drop to make square divisible by n
+        rows_to_drop = data.shape[0] - int(data.shape[0] / matrix_size) * matrix_size
+        if rows_to_drop < 0:
+            raise ValueError("Number of rows to drop cannot be negative.")
+        if rows_to_drop == 0:
+            mat = data.to_numpy()
+        else:
+            mat = data.iloc[:-rows_to_drop, :-rows_to_drop].to_numpy()
+        if mat.shape[0] != mat.shape[1]:
+            raise ValueError("Check the dimension of main square matrix.")
+        if mat.shape[0] % matrix_size != 0:
+            raise ValueError("Check the dimension of smaller square matrix.")
+        # split into n×n blocks
+        mat_list: List[np.ndarray] = []
+        for i1 in range(0, mat.shape[0], matrix_size):
+            for j1 in range(0, mat.shape[1], matrix_size):
+                mat_list.append(mat[i1:i1 + matrix_size, j1:j1 + matrix_size])
+        # Flatten each block into a DataFrame
+        sub_mat_df = pd.DataFrame(
+            [block.flatten() for block in mat_list],
+            columns=[f"ri_{i}_ci_{j}" for i in range(matrix_size) for j in range(matrix_size)],
+        )
+        # Compute min/max indices for each block
+        min_max_ix_dict = {idx + 1: self._return_min_max_ix(block) for idx, block in enumerate(mat_list)}
+        points = pd.DataFrame.from_dict(min_max_ix_dict, orient="index")
+        points = points.rename(columns={0: "min_r", 1: "min_c", 2: "max_r", 3: "max_c"})
+        # Aggregate counts
+        min_df = points.groupby(["min_r", "min_c"]).size().reset_index()
+        min_df = min_df.rename(columns={0: "X3", "min_r": "r", "min_c": "c"})
+        min_df["type"] = "min"
+        max_df = points.groupby(["max_r", "max_c"]).size().reset_index()
+        max_df = max_df.rename(columns={0: "X3", "max_r": "r", "max_c": "c"})
+        max_df["type"] = "max"
+        agg_points = pd.concat([min_df, max_df], ignore_index=True)
+        # Store in shared data container
+        if hasattr(self, 'data') and self.data is not None:
+            self.data.add_minmax_data(file_path, agg_points)
+        return agg_points, sub_mat_df
+
+    # -- high level API for CLI -------------------------------------------
+    def analyze(self, datasets: List[str], matrix_size: int = 3) -> None:
+        """
+        Process a list of CSV datasets for min/max analysis and save results.
 
         Parameters
         ----------
         datasets : list of str
-            Paths to CSV files containing square matrices (with an
-            indexed "DataLine" column).
-        matrix_size : int, default 3
-            Size `n` of the submatrix blocks (n×n) to analyze.
-
-        Returns
-        -------
-        None
+            Paths to CSV files containing square matrices (with an indexed
+            ``DataLine`` column).
+        matrix_size : int, optional
+            Size ``n`` of the submatrix blocks (``n×n``) to analyze.
+            Default is ``3``.
         """
         for file_path in track(datasets, description="[green]Processing minmax..."):
-            self._process_minmax(file_path, matrix_size)
+            agg_points, sub_mat_df = self.compute(file_path, matrix_size)
+            self.save_results(file_path, agg_points, sub_mat_df, matrix_size)
 
-    def _return_min_max_ix(self, m):
+    # -- save --------------------------------------------------------------
+    def save_results(self, file_path: str, agg_points: pd.DataFrame, sub_mat_df: pd.DataFrame, matrix_size: int) -> None:
+        """
+        Persist min/max analysis results to disk.
+
+        Writes the aggregated counts of extrema positions and the flattened
+        submatrices to CSV files in the same directory as the input
+        file.  The filenames include the block size for clarity.
+
+        Parameters
+        ----------
+        file_path : str
+            Original CSV file path.
+        agg_points : pandas.DataFrame
+            DataFrame of aggregated minima and maxima counts.
+        sub_mat_df : pandas.DataFrame
+            DataFrame of flattened submatrices.
+        matrix_size : int
+            Block size used in the computation.
+        """
+        base_path = os.path.dirname(file_path)
+        agg_points.to_csv(os.path.join(base_path, f"min_max_ix({matrix_size}x{matrix_size}).csv"), index=False)
+        sub_mat_df.to_csv(os.path.join(base_path, f"flattened_submat({matrix_size}x{matrix_size}).csv"), index=False)
+
+    # -- internal helper ---------------------------------------------------
+    @staticmethod
+    def _return_min_max_ix(m: np.ndarray) -> List[int]:
         """
         Find the indices of the minimum and maximum entries in a matrix.
 
@@ -72,102 +212,9 @@ class MinMaxAnalyzer(Analyzer):
         Returns
         -------
         list of int
-            A list `[min_row, min_col, max_row, max_col]` giving the
+            A list ``[min_row, min_col, max_row, max_col]`` giving the
             row and column indices of the minimum and maximum values.
-
         """
         min_ix = np.unravel_index(m.argmin(), m.shape)
         max_ix = np.unravel_index(m.argmax(), m.shape)
         return [min_ix[0], min_ix[1], max_ix[0], max_ix[1]]
-
-    def _process_minmax(self, file_path, n=3):
-        """
-        Perform min/max extraction on a single CSV matrix.
-
-        Reads the CSV into a DataFrame indexed by "DataLine", ensures the
-        matrix is square and divisible by `n`, splits it into `n×n`
-        blocks, flattens each block, computes local min/max indices,
-        aggregates counts of these extrema positions, stores results in
-        the shared data container, and writes two CSV outputs:
-          - `<file>_min_max_ix(n×n).csv` containing aggregated counts
-          - `<file>_flattened_submat(n×n).csv` containing flattened blocks
-
-        Parameters
-        ----------
-        file_path : str
-            Path to the CSV file. The CSV must have a "DataLine" column
-            and the rest numeric columns forming a square matrix.
-        n : int, default 3
-            Block size for submatrices.
-
-        Raises
-        ------
-        ValueError
-            If the computed number of rows to drop is negative, if the
-            trimmed matrix is not square, or if its dimension is not
-            divisible by `n`.
-
-        Returns
-        -------
-        None
-        """
-        data = pd.read_csv(file_path, index_col="DataLine")
-        # Determine rows to drop to make square divisible by n
-        rows_to_drop = data.shape[0] - int(data.shape[0] / n) * n
-        if rows_to_drop < 0:
-            raise ValueError("Number of rows to drop cannot be negative.")
-        if rows_to_drop == 0:
-            mat = data.to_numpy()
-        else:
-            mat = data.iloc[:-rows_to_drop, :-rows_to_drop].to_numpy()
-
-        if mat.shape[0] != mat.shape[1]:
-            raise ValueError("Check the dimension of main square matrix.")
-        if mat.shape[0] % n != 0:
-            raise ValueError("Check the dimension of smaller square matrix.")
-
-        # Split into n×n blocks
-        mat_list = []
-        i1 = 0
-        i2 = n
-        while i2 <= mat.shape[0]:
-            j1 = 0
-            j2 = n
-            while j2 <= mat.shape[1]:
-                mat_list.append(mat[i1:i2, j1:j2])
-                j1 += n
-                j2 += n
-            i1 += n
-            i2 += n
-
-        # Flatten each block into a DataFrame
-        sub_mat_df = pd.DataFrame(
-            [block.flatten() for block in mat_list],
-            columns=[f"ri_{i}_ci_{j}" for i in range(n) for j in range(n)],
-        )
-
-        # Compute min/max indices for each block
-        min_max_ix_dict = {
-            idx + 1: self._return_min_max_ix(block) for idx, block in enumerate(mat_list)
-        }
-        points = pd.DataFrame.from_dict(min_max_ix_dict, orient="index")
-        points = points.rename(columns={0: "min_r", 1: "min_c", 2: "max_r", 3: "max_c"})
-
-        # Aggregate counts of minima and maxima positions
-        min_df = points.groupby(["min_r", "min_c"]).size().reset_index()
-        min_df = min_df.rename(columns={0: "X3", "min_r": "r", "min_c": "c"})
-        min_df["type"] = "min"
-
-        max_df = points.groupby(["max_r", "max_c"]).size().reset_index()
-        max_df = max_df.rename(columns={0: "X3", "max_r": "r", "max_c": "c"})
-        max_df["type"] = "max"
-
-        agg_points = pd.concat([min_df, max_df])
-
-        # Store in shared data container
-        self.data.add_minmax_data(file_path, agg_points)
-
-        # Save outputs
-        base_path = os.path.dirname(file_path)
-        agg_points.to_csv(os.path.join(base_path, f"min_max_ix({n}x{n}).csv"), index=False)
-        sub_mat_df.to_csv(os.path.join(base_path, f"flattened_submat({n}x{n}).csv"), index=False)

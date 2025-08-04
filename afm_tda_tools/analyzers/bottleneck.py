@@ -1,18 +1,22 @@
 """
-Module for computing pairwise persistence diagram distances.
+Pairwise persistence diagram distance analysis tools.
 
-This module provides the `BottleneckAnalyzer` class, which converts
-GUDHI persistence diagrams into NumPy arrays and computes both
-bottleneck and Wasserstein distances between all pairs of diagrams.
-Results can be saved as CSV tables.
+This module defines the :class:`BottleneckAnalyzer`, which converts
+persistence diagrams into NumPy arrays and computes pairwise bottleneck
+and Wasserstein distances between all diagrams.  The results can be
+returned to the caller as pandas DataFrames or written to disk.  The
+compute/save separation allows the analysis to be integrated into
+back‑end services where results may be serialised for clients.
 """
 
-import os
+from __future__ import annotations
 
-import gudhi
-import numpy as np
+import os
 import pandas as pd
+import numpy as np
+import gudhi
 from gudhi.hera import bottleneck_distance, wasserstein_distance
+from typing import Dict, Iterable, List, Optional, Tuple
 from rich.progress import track
 
 from .base import Analyzer
@@ -20,164 +24,223 @@ from .base import Analyzer
 
 class BottleneckAnalyzer(Analyzer):
     """
-    Analyzer for pairwise persistence diagram distances.
+    Bottleneck distance analyzer for AFM data.
 
-    This analyzer collects persistence diagrams (either provided by a
-    `PersistenceAnalyzer` or computed on the fly), converts them into
-    Nx2 NumPy arrays of (birth, death), and computes the bottleneck
-    and Wasserstein distances between every pair.
+    This analyzer computes bottleneck and Wasserstein distances between
+    persistence diagrams. It can work with precomputed diagrams or
+    compute them on the fly from height data.
 
-    Parameters
-    ----------
-    data_container : AnalysisData, optional
-        Container for storing analysis outputs. If `None`, a new
-        `AnalysisData` instance is created.
+    The bottleneck distance measures the similarity between two
+    persistence diagrams and is useful for comparing topological
+    features across different samples.
 
     Attributes
     ----------
-    bottleneck_results : list of pandas.DataFrame
-        List of DataFrames containing pairwise bottleneck distances.
-    wasserstein_results : list of pandas.DataFrame
-        List of DataFrames containing pairwise Wasserstein distances.
+    data : object, optional
+        Shared data container for storing results.
+    plt_config : object
+        Matplotlib configuration object for consistent plotting.
+    bottleneck_results : pd.DataFrame
+        Matrix of bottleneck distances between datasets.
+    wasserstein_results : pd.DataFrame
+        Matrix of Wasserstein distances between datasets.
     """
 
-    def __init__(self, data_container=None):
+    def __init__(self, data_container: Optional[object] = None) -> None:
         super().__init__(data_container)
-        self.bottleneck_results = []
-        self.wasserstein_results = []
+        self.bottleneck_results = None
+        self.wasserstein_results = None
 
-    @staticmethod
-    def _diag_to_array(diag):
-        """
-        Convert a GUDHI persistence diagram to an (N, 2) array.
-
-        Transforms a list of (dimension, (birth, death)) tuples into
-        a NumPy array where each row is [birth, death].
-
-        Parameters
-        ----------
-        diag : list of tuple
-            Persistence diagram as returned by `simplex_tree.persistence()`,
-            i.e. a list of tuples `(dim, (birth, death))`.
-
-        Returns
-        -------
-        numpy.ndarray
-            Array of shape (N, 2) with dtype float64, where each row
-            corresponds to a (birth, death) pair.
-        """
-        points = [pair for _, pair in diag]
-        return np.array(points, dtype=np.float64)
-
-    def analyze(self, datasets, persistence_analyzer=None, delta=0.01, order=1.0):
+    def compute(
+        self,
+        datasets: Iterable[str],
+        diagrams: Optional[Dict[str, List[Tuple[int, Tuple[float, float]]]]] = None,
+        delta: float = 0.01,
+        order: float = 1.0,
+        max_edge_length: float = 1.0,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Compute bottleneck and Wasserstein distance matrices.
 
-        For each file in `datasets`, retrieves or computes its persistence
-        diagram, converts all diagrams to NumPy arrays, and then computes
-        two distance matrices:
-          - bottleneck distances with tolerance `delta`
-          - p-Wasserstein distances with order `order`
-
         Parameters
         ----------
-        datasets : list of str
-            Paths to CSV files containing point-cloud distance matrices or
+        datasets : iterable of str
+            Paths to CSV or TXT files containing height data or
             references to precomputed diagrams.
-        persistence_analyzer : PersistenceAnalyzer, optional
-            Analyzer instance that has already computed persistence diagrams.
-            If provided and contains a diagram for a given path, that diagram
-            will be reused; otherwise, it is computed on the fly.
-        delta : float, default 0.01
-            Tolerance parameter for the bottleneck distance.
-        order : float, default 1.0
-            Order parameter for the Wasserstein distance.
+        diagrams : dict, optional
+            Precomputed persistence diagrams keyed by file path.  If
+            provided, diagrams in the dictionary will be used; otherwise
+            diagrams are computed on the fly using ``max_edge_length``.
+        delta : float, optional
+            Tolerance parameter for the bottleneck distance.  Default is
+            ``0.01``.
+        order : float, optional
+            Order parameter for the Wasserstein distance.  Default is
+            ``1.0``.
+        max_edge_length : float, optional
+            Maximum edge length to use when computing persistence diagrams
+            on the fly.  Default is ``1.0``.
 
         Returns
         -------
-        None
+        tuple
+            ``(bn_df, ws_df)`` where ``bn_df`` and ``ws_df`` are pandas
+            DataFrames containing pairwise bottleneck and Wasserstein
+            distances, respectively.
         """
-        names = []
-        diags = []
-
+        names: List[str] = []
+        diagrams_list: List[List[Tuple[int, Tuple[float, float]]]] = []
         # Collect persistence diagrams
-        for path in track(datasets, description="[green]Preparing persistence diagrams..."):
-            if persistence_analyzer and path in persistence_analyzer.data.persistence_diagrams:
-                diag = persistence_analyzer.data.persistence_diagrams[path]
+        for path in track(list(datasets), description="[green]Preparing persistence diagrams..."):
+            if diagrams and path in diagrams:
+                diag = diagrams[path]
             else:
-                diag = self._calc_only_persistence(path)
-            diags.append(diag)
+                # compute diagram on the fly using default max_edge_length
+                diag = self._compute_persistence(path, max_edge_length)
+            diagrams_list.append(diag)
             names.append(os.path.splitext(os.path.basename(path))[0])
-
         # Convert diagrams to arrays of shape (N, 2)
-        arrays = [self._diag_to_array(d) for d in diags]
+        arrays = [self._diag_to_array(d) for d in diagrams_list]
+        # Compute pairwise distances and fill matrices
+        bn_matrix = np.zeros((len(arrays), len(arrays)))
+        ws_matrix = np.zeros((len(arrays), len(arrays)))
+        for i, Xi in enumerate(arrays):
+            for j, Xj in enumerate(arrays):
+                bn_matrix[i, j] = bottleneck_distance(Xi, Xj, delta=delta)
+                ws_matrix[i, j] = wasserstein_distance(Xi, Xj, order=order)
+        bn_df = pd.DataFrame(bn_matrix, index=names, columns=names)
+        ws_df = pd.DataFrame(ws_matrix, index=names, columns=names)
+        # store results in instance attributes for compatibility
+        self.bottleneck_results = bn_df
+        self.wasserstein_results = ws_df
+        return bn_df, ws_df
 
-        # Compute pairwise distances
-        for i, Xi in track(enumerate(arrays), description="[green]Computing diagram distances..."):
-            bottleneck_dist = []
-            wasserstein_dist = []
-
-            for Xj in arrays:
-                bn = bottleneck_distance(Xi, Xj, delta=delta)
-                ws = wasserstein_distance(Xi, Xj, order=order)
-                bottleneck_dist.append(bn)
-                wasserstein_dist.append(ws)
-
-            idx = names[i]
-            cols = names
-            self.bottleneck_results.append(
-                pd.DataFrame([bottleneck_dist], index=[idx], columns=cols)
-            )
-            self.wasserstein_results.append(
-                pd.DataFrame([wasserstein_dist], index=[idx], columns=cols)
-            )
-
-    def _calc_only_persistence(self, file_path):
+    def _compute_persistence(self, file_path: str, max_edge_length: float) -> List[Tuple[int, Tuple[float, float]]]:
         """
-        Compute persistence diagram directly from a CSV distance matrix.
-
-        Reads a CSV file into a NumPy array, constructs a Rips complex
-        with default max_edge_length of 1.0, and returns its persistence
-        diagram.
+        Compute a persistence diagram directly from a CSV or TXT file.
 
         Parameters
         ----------
         file_path : str
-            Path to the CSV file containing a square distance matrix.
+            Path to the CSV or TXT file containing ACF data.
+        max_edge_length : float
+            Maximum edge length to use when building the Rips complex.
 
         Returns
         -------
         list of tuple
-            Persistence diagram as returned by GUDHI's `simplex_tree.persistence()`.
+            Persistence diagram as returned by GUDHI's ``simplex_tree.persistence()``.
         """
-        df = pd.read_csv(file_path)
-        X = df.to_numpy()
-        rips = gudhi.RipsComplex(distance_matrix=X, max_edge_length=1.0)
+        # Определяем формат файла и читаем данные
+        if file_path.endswith('.txt'):
+            # Для .txt файлов читаем как матрицу
+            try:
+                # Пропускаем комментарии и читаем данные
+                data = []
+                with open(file_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            # Разбиваем по табуляции или пробелам
+                            values = line.split()
+                            if values:
+                                data.append([float(v) for v in values])
+                
+                if not data:
+                    raise ValueError("No valid data found in file")
+                
+                df = pd.DataFrame(data)
+            except Exception as e:
+                raise ValueError(f"Error reading TXT file: {e}")
+        else:
+            # Для CSV файлов используем стандартное чтение
+            df = pd.read_csv(file_path)
+        
+        # Обрабатываем ACF данные - создаем точки из временного ряда
+        if 'ACF' in df.columns and 'ix' in df.columns:
+            # Это ACF данные - создаем точки (время, ACF значение)
+            points = df[['ix', 'ACF']].values
+        else:
+            # Предполагаем, что это уже матрица расстояний или облако точек
+            points = df.values
+        
+        rips = gudhi.RipsComplex(points=points, max_edge_length=max_edge_length)
         tree = rips.create_simplex_tree(max_dimension=3)
         return tree.persistence(min_persistence=0)
 
-    def save_results(self, save_path):
+    # -- high level API for CLI -------------------------------------------
+    def analyze(
+        self,
+        datasets: List[str],
+        persistence_analyzer: Optional[object] = None,
+        delta: float = 0.01,
+        order: float = 1.0,
+    ) -> None:
+        """
+        Compute distance matrices for CLI and save to disk.
+
+        Parameters
+        ----------
+        datasets : list of str
+            Paths to CSV or TXT files containing height data.
+        persistence_analyzer : PersistenceAnalyzer, optional
+            If provided and contains diagrams for the datasets, those
+            diagrams are reused; otherwise new diagrams are computed.
+        delta : float, optional
+            Tolerance parameter for the bottleneck distance.
+        order : float, optional
+            Order parameter for the Wasserstein distance.
+        """
+        # if there are no datasets to analyse, simply return
+        if not datasets:
+            return
+        # prepare precomputed diagrams if available
+        diagrams = None
+        if persistence_analyzer is not None:
+            diagrams = persistence_analyzer.data.persistence_diagrams
+        bn_df, ws_df = self.compute(datasets, diagrams=diagrams, delta=delta, order=order)
+        # save to disk using the directory of the first dataset
+        self.save_results(os.path.dirname(datasets[0]), bn_df, ws_df)
+
+    # -- save --------------------------------------------------------------
+    def save_results(self, save_path: str, bn_df: pd.DataFrame, ws_df: pd.DataFrame) -> None:
         """
         Save computed distance matrices to CSV files.
 
-        Creates `save_path` if it does not exist, then concatenates and
-        writes both bottleneck and Wasserstein results as:
-          - results_bottleneck.csv
-          - results_wasserstein.csv
+        Creates ``save_path`` if it does not exist, then writes both
+        bottleneck and Wasserstein results as:
+        ``results_bottleneck.csv`` and ``results_wasserstein.csv``.
 
         Parameters
         ----------
         save_path : str
             Directory where result CSV files will be saved.
-
-        Returns
-        -------
-        None
+        bn_df : pandas.DataFrame
+            Bottleneck distance matrix.
+        ws_df : pandas.DataFrame
+            Wasserstein distance matrix.
         """
         if not os.path.exists(save_path):
             os.makedirs(save_path, exist_ok=True)
+        bn_df.to_csv(os.path.join(save_path, "results_bottleneck.csv"))
+        ws_df.to_csv(os.path.join(save_path, "results_wasserstein.csv"))
 
-        pd.concat(self.bottleneck_results).to_csv(os.path.join(save_path, "results_bottleneck.csv"))
-        pd.concat(self.wasserstein_results).to_csv(
-            os.path.join(save_path, "results_wasserstein.csv")
-        )
+    # -- helpers -----------------------------------------------------------
+    @staticmethod
+    def _diag_to_array(diag: List[Tuple[int, Tuple[float, float]]]) -> np.ndarray:
+        """
+        Convert a GUDHI persistence diagram to an ``(N, 2)`` array.
+
+        Parameters
+        ----------
+        diag : list of tuple
+            Persistence diagram as returned by ``simplex_tree.persistence()``.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of shape ``(N, 2)`` with dtype ``float64``, where each
+            row corresponds to a ``(birth, death)`` pair.
+        """
+        points = [pair for _, pair in diag]
+        return np.array(points, dtype=np.float64)

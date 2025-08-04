@@ -1,181 +1,259 @@
 """
-Module for persistence homology analysis.
+Persistence homology analysis tools.
 
-This module defines the `PersistenceAnalyzer` class, which computes
-GUDHI persistence diagrams from CSV point-cloud data, stores them in
-a shared data container, exports a DataFrame of birth–death intervals,
-and generates both barcode and persistence diagram plots in PNG, SVG,
-and PDF formats.
+This module provides the :class:`PersistenceAnalyzer` class which
+computes GUDHI persistence diagrams from CSV point‑cloud distance
+matrices, stores them in a shared data container, exports a DataFrame
+of birth–death intervals and generates both barcode and persistence
+diagram plots.  The interface has been redesigned to decouple
+computation from plotting and saving, allowing clients to consume raw
+results without generating plots and deferring image generation to
+frontends.
 """
 
-import os
+from __future__ import annotations
 
-import gudhi
-import matplotlib.pyplot as plt
+import os
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import gudhi
+from typing import List, Optional, Tuple
 from rich.progress import track
 
 from .base import Analyzer
 
 
-class PersistenceAnalyzer(Analyzer):
+def _convert_height_to_distance_matrix(df: pd.DataFrame) -> np.ndarray:
     """
-    Analyzer for computing persistence diagrams and plots.
-
-    This analyzer reads each CSV file into a NumPy array, builds a Rips
-    complex up to dimension 3 with a user-specified edge length threshold,
-    computes the persistence diagram, stores it in the shared data
-    container, exports the diagram as a DataFrame, and saves both a
-    barcode plot and a persistence diagram plot in multiple formats.
-
+    Преобразует матрицу высот в матрицу расстояний для персистентной гомологии.
+    
     Parameters
     ----------
-    data_container : AnalysisData, optional
-        Container for storing analysis outputs. If `None`, a new
-        `AnalysisData` instance is created.
+    df : pd.DataFrame
+        Матрица высот
+        
+    Returns
+    -------
+    np.ndarray
+        Матрица расстояний
+    """
+    # Преобразуем DataFrame в numpy array
+    if isinstance(df, pd.DataFrame):
+        X = df.to_numpy()
+    else:
+        X = df
+    
+    # Создаем точки в 3D пространстве (x, y, height)
+    rows, cols = X.shape
+    points = []
+    
+    for i in range(rows):
+        for j in range(cols):
+            points.append([i, j, X[i, j]])
+    
+    points = np.array(points)
+    
+    # Вычисляем матрицу расстояний между всеми точками
+    from scipy.spatial.distance import pdist, squareform
+    distances = pdist(points)
+    distance_matrix = squareform(distances)
+    
+    return distance_matrix
+
+
+class PersistenceAnalyzer(Analyzer):
+    """
+    Persistence homology analyzer for AFM data.
+
+    This analyzer computes persistent homology using the GUDHI library.
+    It converts height data into a distance matrix and computes the
+    Rips complex to extract topological features.
+
+    The persistence diagram shows the birth and death times of
+    topological features (connected components, loops, voids) and
+    can reveal the underlying structure of the surface.
+
+    Attributes
+    ----------
+    data : object, optional
+        Shared data container for storing results.
+    plt_config : object
+        Matplotlib configuration object for consistent plotting.
     """
 
-    def __init__(self, data_container=None):
+    def __init__(self, data_container: Optional[object] = None) -> None:
         super().__init__(data_container)
 
-    def analyze(self, datasets, max_edge_length):
+    def compute(self, file_path: str, max_edge_length: float) -> Tuple[List[Tuple[int, Tuple[float, float]]], pd.DataFrame]:
+        """
+        Compute persistence homology for a single dataset.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the CSV or TXT file to analyze.
+        max_edge_length : float
+            Maximum edge length parameter for the Rips complex.
+
+        Returns
+        -------
+        tuple
+            A tuple ``(diag, diag_df)`` where ``diag`` is the raw
+            persistence diagram (list of ``(dimension, (birth, death))``)
+            and ``diag_df`` is a pandas DataFrame with columns
+            ``Start``, ``End``, ``Length`` and ``Homology group``.
+        """
+        # Определяем формат файла и читаем данные
+        if file_path.endswith('.txt'):
+            # Для .txt файлов читаем как матрицу
+            try:
+                # Пропускаем комментарии и читаем данные
+                data = []
+                with open(file_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            # Разбиваем по табуляции или пробелам
+                            values = line.split()
+                            if values:
+                                data.append([float(v) for v in values])
+                
+                if not data:
+                    raise ValueError("No valid data found in file")
+                
+                df = pd.DataFrame(data)
+            except Exception as e:
+                raise ValueError(f"Error reading TXT file: {e}")
+        else:
+            # Для CSV файлов используем стандартное чтение
+            df = pd.read_csv(file_path)
+        
+        # Преобразуем данные высоты в матрицу расстояний
+        X = _convert_height_to_distance_matrix(df)
+        
+        # compute persistence diagram using GUDHI
+        gudhi.persistence_graphical_tools._gudhi_matplotlib_use_tex = False
+        rips_complex = gudhi.RipsComplex(distance_matrix=X, max_edge_length=max_edge_length)
+        simplex_tree = rips_complex.create_simplex_tree(max_dimension=3)
+        diag = simplex_tree.persistence(min_persistence=0)
+        
+        # store raw diagram
+        if hasattr(self, 'data') and self.data is not None:
+            self.data.add_persistence_diagram(file_path, diag)
+        # convert to DataFrame
+        records = [self._to_interval_record(dim, birth_death) for dim, birth_death in diag]
+        diag_df = pd.DataFrame(records, columns=["Start", "End", "Length", "Homology group"])
+        return diag, diag_df
+
+    # -- high level API for CLI -------------------------------------------
+    def analyze(self, datasets: List[str], max_edge_length: float) -> None:
         """
         Compute and save persistence diagrams for each dataset.
 
-        Iterates over each CSV file path in `datasets`, invoking
-        `_process_persistence` with the specified `max_edge_length`.
+        Iterates over each CSV file path in ``datasets``, invokes
+        :meth:`compute` and writes the resulting interval DataFrame and
+        plots to disk.  This method mirrors the original behaviour for
+        command line use but now uses the compute/save paradigm.
 
         Parameters
         ----------
         datasets : list of str
-            Paths to CSV files representing distance matrices or point-cloud
+            Paths to CSV files representing distance matrices or point‑cloud
             data.
         max_edge_length : float
             Maximum edge length parameter for the Rips complex.
         """
         for file_path in track(datasets, description="[green]Processing persistence..."):
-            self._process_persistence(file_path, max_edge_length)
+            diag, diag_df = self.compute(file_path, max_edge_length)
+            # save interval DataFrame and plots
+            self.save_results(file_path, diag, diag_df)
 
-    def _process_persistence(self, file_path, max_edge_length):
+    # -- save --------------------------------------------------------------
+    def save_results(self, file_path: str, diag: List[Tuple[int, Tuple[float, float]]], diag_df: pd.DataFrame, save_plots: bool = True) -> None:
         """
-        Compute persistence diagram and save results for one file.
+        Persist persistence analysis results to disk.
 
-        Reads the CSV file into a NumPy array, constructs a Rips complex,
-        computes its persistence diagram, stores the raw diagram in the
-        data container, exports a DataFrame of intervals, and saves
-        barcode and persistence diagram plots.
+        Writes the interval DataFrame to ``diag_df_output.csv`` in the
+        dataset's directory.  If ``save_plots`` is ``True`` barcode and
+        persistence diagram plots are generated and saved as PNG, SVG
+        and PDF.
 
         Parameters
         ----------
         file_path : str
-            Path to the CSV file to analyze.
-        max_edge_length : float
-            Maximum edge length to use when building the Rips complex.
-
-        Returns
-        -------
-        None
+            Original CSV file path.
+        diag : list
+            Raw persistence diagram as returned from :func:`compute`.
+        diag_df : pandas.DataFrame
+            DataFrame of persistence intervals.
+        save_plots : bool, optional
+            Whether to generate and save plots.  Default is ``True``.
         """
-        # Load data and compute persistence
-        df = pd.read_csv(file_path)
-        X = df.to_numpy()
-        gudhi.persistence_graphical_tools._gudhi_matplotlib_use_tex = False
-        rips_complex = gudhi.RipsComplex(distance_matrix=X, max_edge_length=max_edge_length)
-        simplex_tree = rips_complex.create_simplex_tree(max_dimension=3)
-        diag = simplex_tree.persistence(min_persistence=0)
-
-        # Store raw diagram
-        self.data.add_persistence_diagram(file_path, diag)
-
-        # Save path
         base_path = os.path.dirname(file_path)
-
-        # Export intervals as DataFrame
-        records = self._extract_list_from_raw_data(diag)
-        diag_df = pd.DataFrame(records, columns=["Start", "End", "Length", "Homology group"])
+        # save DataFrame
         diag_df.to_csv(os.path.join(base_path, "diag_df_output.csv"), index=False)
+        if save_plots:
+            # number of intervals (used to limit bars/dots)
+            diag_len = len(diag)
+            fig_bar = self.plot_barcode(diag, diag_len)
+            for ext in ("png", "svg", "pdf"):
+                fig_bar.savefig(os.path.join(base_path, f"barcode.{ext}"), format=ext, dpi=1200, bbox_inches="tight")
+            plt.close(fig_bar)
+            fig_diag = self.plot_persistence_diagram(diag, diag_len)
+            for ext in ("png", "svg", "pdf"):
+                fig_diag.savefig(
+                    os.path.join(base_path, f"persistence_diagram.{ext}"),
+                    format=ext,
+                    dpi=1200,
+                    bbox_inches="tight",
+                )
+            plt.close(fig_diag)
 
-        # Save plots
-        self._save_barcode(base_path, diag, len(records))
-        self._save_persistence_diagram(base_path, diag, len(records))
-
-    def _extract_list_from_raw_data(self, diagrams):
+    # -- plotting ----------------------------------------------------------
+    def plot_barcode(self, diag: List[Tuple[int, Tuple[float, float]]], diag_length: int):
         """
-        Convert raw GUDHI diagram into a list of intervals.
-
-        Transforms a list of `(dim, (birth, death))` tuples into a list
-        of records `[birth, death, |birth-death|, dim]`.
+        Generate a persistence barcode plot.
 
         Parameters
         ----------
-        diagrams : list of tuple
-            Persistence diagram as returned by `simplex_tree.persistence()`.
-
-        Returns
-        -------
-        list of list
-            Each inner list contains `[start, end, length, homology_group]`.
-        """
-        records = []
-        for dim, (birth, death) in diagrams:
-            records.append([birth, death, abs(birth - death), dim])
-        return records
-
-    def _save_barcode(self, base_path, diag, diag_length):
-        """
-        Generate and save a persistence barcode plot.
-
-        Applies Matplotlib configuration, plots the barcode with a legend,
-        and saves it as PNG, SVG, and PDF using high resolution.
-
-        Parameters
-        ----------
-        file_path : str
-            Original CSV file path used to derive base filenames.
-        diag : list of tuple
+        diag : list
             Persistence diagram to plot.
         diag_length : int
-            Number of intervals in the diagram.
+            Number of intervals; used to cap the number of bars drawn.
 
         Returns
         -------
-        None
+        matplotlib.figure.Figure
+            A figure containing the barcode plot.
         """
         self.plt_config.apply()
-        gudhi.plot_persistence_barcode(
-            diag, fontsize=18, legend=True, inf_delta=0.5, max_intervals=diag_length + 1
-        )
+        fig = plt.figure()
+        gudhi.plot_persistence_barcode(diag, fontsize=18, legend=True, inf_delta=0.5, max_intervals=diag_length + 1)
         plt.xlabel("Sampling length, nm", fontsize=16)
         plt.ylabel("Topological invariants", fontsize=18)
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=0)
+        return fig
 
-        for ext in ("png", "svg", "pdf"):
-            plt.savefig(
-                os.path.join(base_path, f"barcode.{ext}"), format=ext, dpi=1200, bbox_inches="tight"
-            )
-
-    def _save_persistence_diagram(self, base_path, diag, diag_length):
+    def plot_persistence_diagram(self, diag: List[Tuple[int, Tuple[float, float]]], diag_length: int):
         """
-        Generate and save a persistence diagram plot.
-
-        Applies Matplotlib configuration, plots the persistence diagram
-        with a legend, and saves it as PNG, SVG, and PDF using high resolution.
+        Generate a persistence diagram plot.
 
         Parameters
         ----------
-        file_path : str
-            Original CSV file path used to derive base filenames.
-        diag : list of tuple
+        diag : list
             Persistence diagram to plot.
         diag_length : int
-            Number of intervals in the diagram.
+            Number of intervals; used to cap the number of points drawn.
 
         Returns
         -------
-        None
+        matplotlib.figure.Figure
+            A figure containing the persistence diagram plot.
         """
         self.plt_config.apply()
+        fig = plt.figure()
         gudhi.plot_persistence_diagram(
             diag,
             fontsize=18,
@@ -189,11 +267,25 @@ class PersistenceAnalyzer(Analyzer):
         plt.ylabel("Feature disappearance, nm", fontsize=18)
         plt.xticks(fontsize=16)
         plt.yticks(fontsize=16)
+        return fig
 
-        for ext in ("png", "svg", "pdf"):
-            plt.savefig(
-                os.path.join(base_path, f"persistence_diagram.{ext}"),
-                format=ext,
-                dpi=1200,
-                bbox_inches="tight",
-            )
+    # -- helper ------------------------------------------------------------
+    @staticmethod
+    def _to_interval_record(dim: int, birth_death: Tuple[float, float]) -> Tuple[float, float, float, int]:
+        """
+        Convert a persistence interval into a record.
+
+        Parameters
+        ----------
+        dim : int
+            Homology dimension of the interval.
+        birth_death : tuple
+            Pair ``(birth, death)``.
+
+        Returns
+        -------
+        tuple
+            ``(birth, death, abs(birth - death), dim)``.
+        """
+        birth, death = birth_death
+        return birth, death, abs(birth - death), dim
