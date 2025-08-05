@@ -111,20 +111,26 @@ class MinMaxAnalyzer(Analyzer):
             except Exception as e:
                 raise ValueError(f"Error reading TXT file: {e}")
         else:
-            # Для CSV файлов используем стандартное чтение
-            df = pd.read_csv(file_path)
+            # Для CSV файлов используем стандартное чтение без заголовков
+            df = pd.read_csv(file_path, header=None)
         
         # Преобразуем данные в нужный формат
         data = _convert_data_to_expected_format(df)
-        
+
+        # Drop potential DataLine column for square matrix operations
+        if 'DataLine' in data.columns:
+            matrix = data.drop(columns=['DataLine'])
+        else:
+            matrix = data
+
         # Determine rows to drop to make square divisible by n
-        rows_to_drop = data.shape[0] - int(data.shape[0] / matrix_size) * matrix_size
+        rows_to_drop = matrix.shape[0] - int(matrix.shape[0] / matrix_size) * matrix_size
         if rows_to_drop < 0:
             raise ValueError("Number of rows to drop cannot be negative.")
         if rows_to_drop == 0:
-            mat = data.to_numpy()
+            mat = matrix.to_numpy()
         else:
-            mat = data.iloc[:-rows_to_drop, :-rows_to_drop].to_numpy()
+            mat = matrix.iloc[:-rows_to_drop, :-rows_to_drop].to_numpy()
         if mat.shape[0] != mat.shape[1]:
             raise ValueError("Check the dimension of main square matrix.")
         if mat.shape[0] % matrix_size != 0:

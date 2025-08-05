@@ -87,6 +87,13 @@ def main() -> None:
         help="Scaling factor to apply to raw data values.",
     )
     parser.add_argument(
+        "--grid-size",
+        "-g",
+        type=int,
+        default=None,
+        help="Optional crop size for input matrices (e.g. 64).",
+    )
+    parser.add_argument(
         "--exclude",
         "-x",
         nargs="*",
@@ -104,6 +111,7 @@ def main() -> None:
         delta=args.delta_bottleneck,
         order=args.order_wasserstein,
         multiply_const=args.multiply_const,
+        grid_size=args.grid_size,
     )
     pipeline.run()
 

@@ -13,13 +13,19 @@ analysis pipeline.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional, List
 
 import pandas as pd
 from rich.progress import track
 
 
-def txt_to_csv_folder(raw_data_path: str | Path, processed_path: str | Path, multiply_const: float = 1e9) -> None:
+def txt_to_csv_folder(
+    raw_data_path: str | Path,
+    processed_path: str | Path,
+    multiply_const: float = 1e9,
+    grid_size: Optional[int] = None,
+    exclude_patterns: Optional[List[str]] = None,
+) -> None:
     """
     Convert all `.txt` files under a directory into CSV files.
 
@@ -41,31 +47,38 @@ def txt_to_csv_folder(raw_data_path: str | Path, processed_path: str | Path, mul
     multiply_const : float, optional
         Factor by which to multiply all numeric values after reading.
         Default is ``1e9`` to convert units.
+    grid_size : int, optional
+        If provided, crop the loaded matrices to ``grid_size × grid_size``
+        in order to reduce computational cost for tests or quick runs.
+    exclude_patterns : list of str, optional
+        Filename suffixes to skip during preprocessing.
     """
     raw = Path(raw_data_path)
     proc = Path(processed_path)
     proc.mkdir(parents=True, exist_ok=True)
 
     txt_files: Iterable[Path] = raw.rglob("*.txt")
+    patterns = exclude_patterns or []
     for txt_file in track(list(txt_files), description="[green]Preprocessing txt->csv..."):
+        if any(txt_file.name.endswith(p) for p in patterns):
+            continue
         # Read as whitespace‑delimited, skip first 4 lines, no header
-        df = (
-            pd.read_csv(
-                txt_file,
-                sep=r"\s+",
-                skiprows=4,
-                header=None,
-                engine="python",
-            )
-            * multiply_const
-        )
+        df = pd.read_csv(
+            txt_file,
+            sep=r"\s+",
+            skiprows=4,
+            header=None,
+            engine="python",
+        ) * multiply_const
+
+        if grid_size is not None:
+            df = df.iloc[:grid_size, :grid_size]
 
         # Insert DataLine index and rename columns
         df.insert(0, "DataLine", range(len(df)))
         df.columns = ["DataLine"] + [f"Pos = {i}" for i in range(df.shape[1] - 1)]
 
-        # Create output directory and save CSV
+        # Create output directory and save CSV directly under processed path
         stem = txt_file.stem
-        out_dir = proc / stem
-        out_dir.mkdir(exist_ok=True)
-        df.to_csv(out_dir / f"{stem}.csv", index=False)
+        proc.mkdir(exist_ok=True)
+        df.to_csv(proc / f"{stem}.csv", index=False)

@@ -24,42 +24,39 @@ from rich.progress import track
 from .base import Analyzer
 
 
-def _convert_height_to_distance_matrix(df: pd.DataFrame) -> np.ndarray:
-    """
-    Преобразует матрицу высот в матрицу расстояний для персистентной гомологии.
-    
+def _prepare_distance_matrix(df: pd.DataFrame) -> np.ndarray:
+    """Return a square matrix suitable for ``RipsComplex``.
+
+    The preprocessing step writes ``DataLine`` as the first column of each
+    CSV.  For persistence we need a symmetric ``n × n`` distance matrix.
+    This helper simply drops the first column when present and validates
+    the result without constructing an explicit pairwise distance matrix,
+    which would otherwise explode memory usage.
+
     Parameters
     ----------
     df : pd.DataFrame
-        Матрица высот
-        
+        Raw matrix loaded from CSV.
+
     Returns
     -------
-    np.ndarray
-        Матрица расстояний
+    numpy.ndarray
+        ``n × n`` array ready to be interpreted as a distance matrix.
     """
-    # Преобразуем DataFrame в numpy array
+
     if isinstance(df, pd.DataFrame):
-        X = df.to_numpy()
+        X = df.copy()
     else:
-        X = df
-    
-    # Создаем точки в 3D пространстве (x, y, height)
-    rows, cols = X.shape
-    points = []
-    
-    for i in range(rows):
-        for j in range(cols):
-            points.append([i, j, X[i, j]])
-    
-    points = np.array(points)
-    
-    # Вычисляем матрицу расстояний между всеми точками
-    from scipy.spatial.distance import pdist, squareform
-    distances = pdist(points)
-    distance_matrix = squareform(distances)
-    
-    return distance_matrix
+        X = pd.DataFrame(df)
+
+    # Drop ``DataLine`` column if present
+    if X.shape[1] == X.shape[0] + 1:
+        X = X.drop(columns=X.columns[0])
+
+    if X.shape[0] != X.shape[1]:
+        raise ValueError("Input data must form a square matrix")
+
+    return X.to_numpy()
 
 
 class PersistenceAnalyzer(Analyzer):
@@ -129,8 +126,9 @@ class PersistenceAnalyzer(Analyzer):
             # Для CSV файлов используем стандартное чтение
             df = pd.read_csv(file_path)
         
-        # Преобразуем данные высоты в матрицу расстояний
-        X = _convert_height_to_distance_matrix(df)
+        # Подготовим матрицу расстояний. Преобразование не вычисляет
+        # попарные расстояния, а лишь приводит данные к квадратной форме.
+        X = _prepare_distance_matrix(df)
         
         # compute persistence diagram using GUDHI
         gudhi.persistence_graphical_tools._gudhi_matplotlib_use_tex = False

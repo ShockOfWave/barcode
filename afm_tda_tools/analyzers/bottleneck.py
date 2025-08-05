@@ -135,36 +135,37 @@ class BottleneckAnalyzer(Analyzer):
         if file_path.endswith('.txt'):
             # Для .txt файлов читаем как матрицу
             try:
-                # Пропускаем комментарии и читаем данные
                 data = []
                 with open(file_path, 'r') as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#'):
-                            # Разбиваем по табуляции или пробелам
                             values = line.split()
                             if values:
                                 data.append([float(v) for v in values])
-                
+
                 if not data:
                     raise ValueError("No valid data found in file")
-                
+
                 df = pd.DataFrame(data)
             except Exception as e:
                 raise ValueError(f"Error reading TXT file: {e}")
         else:
             # Для CSV файлов используем стандартное чтение
             df = pd.read_csv(file_path)
-        
+
         # Обрабатываем ACF данные - создаем точки из временного ряда
         if 'ACF' in df.columns and 'ix' in df.columns:
             # Это ACF данные - создаем точки (время, ACF значение)
             points = df[['ix', 'ACF']].values
+            rips = gudhi.RipsComplex(points=points, max_edge_length=max_edge_length)
         else:
-            # Предполагаем, что это уже матрица расстояний или облако точек
-            points = df.values
-        
-        rips = gudhi.RipsComplex(points=points, max_edge_length=max_edge_length)
+            # Предполагаем, что это матрица расстояний после предобработки
+            if df.shape[1] == df.shape[0] + 1:
+                df = df.drop(columns=df.columns[0])
+            matrix = df.to_numpy()
+            rips = gudhi.RipsComplex(distance_matrix=matrix, max_edge_length=max_edge_length)
+
         tree = rips.create_simplex_tree(max_dimension=3)
         return tree.persistence(min_persistence=0)
 

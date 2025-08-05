@@ -78,8 +78,13 @@ class AnalysisPipeline:
         delta: float = 0.01,
         order: float = 1.0,
         multiply_const: float = 1e9,
+        grid_size: Optional[int] = None,
     ) -> None:
         self.data_path = data_path
+        parent = os.path.dirname(save_path)
+        if parent and not os.path.isdir(parent):
+            raise FileNotFoundError(f"Parent directory {parent} does not exist")
+        os.makedirs(save_path, exist_ok=True)
         self.save_path = save_path
         self.exclude_patterns = (
             exclude_patterns if exclude_patterns is not None else ["(3x3).csv", "_auto.csv", "output.csv"]
@@ -98,30 +103,43 @@ class AnalysisPipeline:
         self.matrix_size = matrix_size
         self.delta = delta
         self.order = order
+        self.grid_size = grid_size
 
     def run(self) -> None:
         """Execute the full analysis pipeline."""
-        # Step 1: collect files for analysis (both .txt and .csv)
+        if not os.path.isdir(self.data_path):
+            raise FileNotFoundError(f"Data path {self.data_path} does not exist")
+
+        # Step 1: preprocess raw txt files into CSV under save_path
+        txt_to_csv_folder(
+            self.data_path,
+            self.save_path,
+            multiply_const=self.multiply_const,
+            grid_size=self.grid_size,
+            exclude_patterns=self.exclude_patterns,
+        )
+
+        # Step 2: collect processed CSV files
         files = []
-        for root, _, filenames in os.walk(self.data_path):
+        for root, _, filenames in os.walk(self.save_path):
             for filename in filenames:
-                if filename.endswith(('.txt', '.csv')):
-                    file_path = os.path.join(root, filename)
-                    # Check if file should be excluded
-                    if not any(filename.endswith(pattern) for pattern in self.exclude_patterns):
-                        files.append(file_path)
+                if filename.endswith('.csv') and not any(
+                    filename.endswith(pattern) for pattern in self.exclude_patterns
+                ):
+                    files.append(os.path.join(root, filename))
         
         if not files:
             print("No files found for analysis.")
             return
-        
-        # Step 2: autocorrelation (compute + save)
+
+        # Step 3 onwards: run analyzers on processed files
+        # Autocorrelation (compute + save)
         self.acf_analyzer.analyze(files, width_line=self.width_line)
-        # Step 3: persistence diagrams (compute + save)
+        # Persistence diagrams (compute + save)
         self.persistence_analyzer.analyze(files, max_edge_length=self.max_edge_length)
-        # Step 4: min–max block‑wise analysis (compute + save)
+        # Min–max block‑wise analysis (compute + save)
         self.minmax_analyzer.analyze(files, matrix_size=self.matrix_size)
-        # Step 5: bottleneck and Wasserstein distances (compute + save)
+        # Bottleneck and Wasserstein distances (compute + save)
         self.bottleneck_analyzer.analyze(
             files,
             persistence_analyzer=self.persistence_analyzer,
