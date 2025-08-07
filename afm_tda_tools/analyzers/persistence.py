@@ -14,11 +14,11 @@ frontends.
 from __future__ import annotations
 
 import os
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+
 import gudhi
-from typing import List, Optional, Tuple
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from rich.progress import track
 
 from .base import Analyzer
@@ -43,11 +43,7 @@ def _prepare_distance_matrix(df: pd.DataFrame) -> np.ndarray:
     numpy.ndarray
         ``n × n`` array ready to be interpreted as a distance matrix.
     """
-
-    if isinstance(df, pd.DataFrame):
-        X = df.copy()
-    else:
-        X = pd.DataFrame(df)
+    X = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame(df)
 
     # Drop ``DataLine`` column if present
     if X.shape[1] == X.shape[0] + 1:
@@ -79,10 +75,12 @@ class PersistenceAnalyzer(Analyzer):
         Matplotlib configuration object for consistent plotting.
     """
 
-    def __init__(self, data_container: Optional[object] = None) -> None:
+    def __init__(self, data_container: object | None = None) -> None:
         super().__init__(data_container)
 
-    def compute(self, file_path: str, max_edge_length: float) -> Tuple[List[Tuple[int, Tuple[float, float]]], pd.DataFrame]:
+    def compute(
+        self, file_path: str, max_edge_length: float
+    ) -> tuple[list[tuple[int, tuple[float, float]]], pd.DataFrame]:
         """
         Compute persistence homology for a single dataset.
 
@@ -107,7 +105,7 @@ class PersistenceAnalyzer(Analyzer):
             try:
                 # Пропускаем комментарии и читаем данные
                 data = []
-                with open(file_path, 'r') as f:
+                with open(file_path) as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#'):
@@ -121,7 +119,7 @@ class PersistenceAnalyzer(Analyzer):
                 
                 df = pd.DataFrame(data)
             except Exception as e:
-                raise ValueError(f"Error reading TXT file: {e}")
+                raise ValueError(f"Error reading TXT file: {e}") from e
         else:
             # Для CSV файлов используем стандартное чтение
             df = pd.read_csv(file_path)
@@ -145,7 +143,7 @@ class PersistenceAnalyzer(Analyzer):
         return diag, diag_df
 
     # -- high level API for CLI -------------------------------------------
-    def analyze(self, datasets: List[str], max_edge_length: float) -> None:
+    def analyze(self, datasets: list[str], max_edge_length: float) -> None:
         """
         Compute and save persistence diagrams for each dataset.
 
@@ -168,7 +166,13 @@ class PersistenceAnalyzer(Analyzer):
             self.save_results(file_path, diag, diag_df)
 
     # -- save --------------------------------------------------------------
-    def save_results(self, file_path: str, diag: List[Tuple[int, Tuple[float, float]]], diag_df: pd.DataFrame, save_plots: bool = True) -> None:
+    def save_results(
+        self,
+        file_path: str,
+        diag: list[tuple[int, tuple[float, float]]],
+        diag_df: pd.DataFrame,
+        save_plots: bool = True,
+    ) -> None:
         """
         Persist persistence analysis results to disk.
 
@@ -196,7 +200,12 @@ class PersistenceAnalyzer(Analyzer):
             diag_len = len(diag)
             fig_bar = self.plot_barcode(diag, diag_len)
             for ext in ("png", "svg", "pdf"):
-                fig_bar.savefig(os.path.join(base_path, f"barcode.{ext}"), format=ext, dpi=1200, bbox_inches="tight")
+                fig_bar.savefig(
+                    os.path.join(base_path, f"barcode.{ext}"),
+                    format=ext,
+                    dpi=1200,
+                    bbox_inches="tight",
+                )
             plt.close(fig_bar)
             fig_diag = self.plot_persistence_diagram(diag, diag_len)
             for ext in ("png", "svg", "pdf"):
@@ -209,7 +218,9 @@ class PersistenceAnalyzer(Analyzer):
             plt.close(fig_diag)
 
     # -- plotting ----------------------------------------------------------
-    def plot_barcode(self, diag: List[Tuple[int, Tuple[float, float]]], diag_length: int):
+    def plot_barcode(
+        self, diag: list[tuple[int, tuple[float, float]]], diag_length: int
+    ):
         """
         Generate a persistence barcode plot.
 
@@ -226,15 +237,24 @@ class PersistenceAnalyzer(Analyzer):
             A figure containing the barcode plot.
         """
         self.plt_config.apply()
-        fig = plt.figure()
-        gudhi.plot_persistence_barcode(diag, fontsize=18, legend=True, inf_delta=0.5, max_intervals=diag_length + 1)
-        plt.xlabel("Sampling length, nm", fontsize=16)
-        plt.ylabel("Topological invariants", fontsize=18)
-        plt.xticks(fontsize=16)
-        plt.yticks(fontsize=0)
+        fig, ax = plt.subplots()
+        gudhi.plot_persistence_barcode(
+            diag,
+            axes=ax,
+            fontsize=18,
+            legend=True,
+            inf_delta=0.5,
+            max_intervals=diag_length + 1,
+        )
+        ax.set_xlabel("Sampling length, nm", fontsize=16)
+        ax.set_ylabel("Topological invariants", fontsize=18)
+        ax.tick_params(axis="x", labelsize=16)
+        ax.tick_params(axis="y", labelsize=0)
         return fig
 
-    def plot_persistence_diagram(self, diag: List[Tuple[int, Tuple[float, float]]], diag_length: int):
+    def plot_persistence_diagram(
+        self, diag: list[tuple[int, tuple[float, float]]], diag_length: int
+    ):
         """
         Generate a persistence diagram plot.
 
@@ -251,9 +271,10 @@ class PersistenceAnalyzer(Analyzer):
             A figure containing the persistence diagram plot.
         """
         self.plt_config.apply()
-        fig = plt.figure()
+        fig, ax = plt.subplots()
         gudhi.plot_persistence_diagram(
             diag,
+            axes=ax,
             fontsize=18,
             alpha=0.5,
             legend=True,
@@ -261,15 +282,17 @@ class PersistenceAnalyzer(Analyzer):
             greyblock=False,
             max_intervals=diag_length + 1,
         )
-        plt.xlabel("Feature appearance, nm", fontsize=18)
-        plt.ylabel("Feature disappearance, nm", fontsize=18)
-        plt.xticks(fontsize=16)
-        plt.yticks(fontsize=16)
+        ax.set_xlabel("Feature appearance, nm", fontsize=18)
+        ax.set_ylabel("Feature disappearance, nm", fontsize=18)
+        ax.tick_params(axis="x", labelsize=16)
+        ax.tick_params(axis="y", labelsize=16)
         return fig
 
     # -- helper ------------------------------------------------------------
     @staticmethod
-    def _to_interval_record(dim: int, birth_death: Tuple[float, float]) -> Tuple[float, float, float, int]:
+    def _to_interval_record(
+        dim: int, birth_death: tuple[float, float]
+    ) -> tuple[float, float, float, int]:
         """
         Convert a persistence interval into a record.
 

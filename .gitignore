@@ -222,7 +222,7 @@ test_dev
 
 # data
 /data
-/test_files
+/output
 
 # slurm
 run.sh

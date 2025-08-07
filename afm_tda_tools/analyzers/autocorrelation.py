@@ -24,11 +24,10 @@ frontend for visualisation.
 from __future__ import annotations
 
 import os
-import pandas as pd
-import numpy as np
+
 import matplotlib.pyplot as plt
+import pandas as pd
 import statsmodels.api as sm
-from typing import List, Optional
 from rich.progress import track
 
 from .base import Analyzer
@@ -37,33 +36,25 @@ from .base import Analyzer
 def _convert_data_to_expected_format(df: pd.DataFrame) -> pd.DataFrame:
     """
     Преобразует матрицу данных в формат, ожидаемый анализатором.
-    
+
     Parameters
     ----------
     df : pd.DataFrame
         Исходная матрица данных
-        
+
     Returns
     -------
     pd.DataFrame
         DataFrame с колонками DataLine и Pos = i
     """
-    # Если данные уже в нужном формате, возвращаем как есть
-    if 'DataLine' in df.columns and any(col.startswith('Pos = ') for col in df.columns):
+    if "DataLine" in df.columns and any(col.startswith("Pos = ") for col in df.columns):
         return df
-    
-    # Преобразуем матрицу в нужный формат
+
     rows, cols = df.shape
-    
-    # Создаем DataFrame с колонкой DataLine
-    result_df = pd.DataFrame()
-    result_df['DataLine'] = range(rows)
-    
-    # Добавляем колонки Pos = i
-    for i in range(cols):
-        result_df[f'Pos = {i}'] = df.iloc[:, i].values
-    
-    return result_df
+    data = {f"Pos = {i}": df.iloc[:, i].to_numpy() for i in range(cols)}
+    data["DataLine"] = range(rows)
+    column_order = ["DataLine", *[f"Pos = {i}" for i in range(cols)]]
+    return pd.DataFrame(data, columns=column_order)
 
 
 class AutocorrelationAnalyzer(Analyzer):
@@ -87,7 +78,7 @@ class AutocorrelationAnalyzer(Analyzer):
         Matplotlib configuration object for consistent plotting.
     """
 
-    def __init__(self, data_container: Optional[object] = None) -> None:
+    def __init__(self, data_container: object | None = None) -> None:
         super().__init__(data_container)
 
     def compute(self, file_path: str, width_line: float) -> pd.DataFrame:
@@ -113,7 +104,7 @@ class AutocorrelationAnalyzer(Analyzer):
             try:
                 # Пропускаем комментарии и читаем данные
                 data = []
-                with open(file_path, 'r') as f:
+                with open(file_path) as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#'):
@@ -127,7 +118,7 @@ class AutocorrelationAnalyzer(Analyzer):
                 
                 df = pd.DataFrame(data)
             except Exception as e:
-                raise ValueError(f"Error reading TXT file: {e}")
+                raise ValueError(f"Error reading TXT file: {e}") from e
         else:
             # Для CSV файлов используем стандартное чтение
             df = pd.read_csv(file_path)
@@ -151,7 +142,7 @@ class AutocorrelationAnalyzer(Analyzer):
         return acf_df
 
     # -- high level API for CLI -------------------------------------------
-    def analyze(self, datasets: List[str], width_line: float) -> None:
+    def analyze(self, datasets: list[str], width_line: float) -> None:
         """
         Compute and save autocorrelation for each dataset.
 
@@ -233,16 +224,31 @@ class AutocorrelationAnalyzer(Analyzer):
         acf_df_y = acf_df[acf_df["Axis"] == ax_y].rename(columns={"ACF": f"Along {ax_y}-direction"})
 
         fig, ax = plt.subplots(figsize=(7, 5))
-        ax.plot(acf_df_x["ix"], acf_df_x[f"Along {ax_x}-direction"], color="darkorange", linewidth=2.5)
-        ax.plot(acf_df_y["ix"], acf_df_y[f"Along {ax_y}-direction"], color="royalblue", linewidth=2.5)
+        if not acf_df_x.empty:
+            ax.plot(
+                acf_df_x["ix"],
+                acf_df_x[f"Along {ax_x}-direction"],
+                color="darkorange",
+                linewidth=2.5,
+                label=f"Along {ax_x}-direction",
+            )
+        if not acf_df_y.empty:
+            ax.plot(
+                acf_df_y["ix"],
+                acf_df_y[f"Along {ax_y}-direction"],
+                color="royalblue",
+                linewidth=2.5,
+                label=f"Along {ax_y}-direction",
+            )
         ax.axhline(y=0, xmin=0, xmax=1, linestyle="--", color="black")
         ax.axhline(y=0.1, xmin=0, xmax=1, linestyle="--", color="brown")
         ax.set_title(f"Autocorrelation along {ax_x}- and {ax_y}-direction")
         ax.set_xlabel("Sampling length, μm")
         ax.set_ylabel("Autocorrelation function, C(τ)")
         
-        # Проверяем, есть ли данные для легенды
-        if len(acf_df_x) > 0 and len(acf_df_y) > 0:
+        # Добавляем легенду только если есть помеченные линии
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
             ax.legend()
         
         return fig
