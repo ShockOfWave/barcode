@@ -145,5 +145,6 @@ class AnalysisPipeline:
             persistence_analyzer=self.persistence_analyzer,
             delta=self.delta,
             order=self.order,
+            save_path=self.save_path,
         )
         print("Pipeline finished successfully.")

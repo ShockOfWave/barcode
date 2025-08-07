@@ -135,19 +135,20 @@ class TestAnalysisPipeline:
             data_path=temp_data_dir,
             save_path=temp_output_dir
         )
-        
+
         # Запускаем pipeline
         pipeline.run()
-        
-        # Проверяем структуру выходных файлов
-        output_files = list(Path(temp_output_dir).glob("*"))
-        
-        # Должны быть созданы файлы результатов
-        assert len(output_files) > 0
-        
-        # Проверяем наличие файлов результатов (любого типа)
-        result_files = [f for f in output_files if f.is_file()]
-        assert len(result_files) > 0
+
+        root = Path(temp_output_dir)
+        # Проверяем, что матрицы расстояний сохранены в корне
+        assert (root / "results_bottleneck.csv").exists()
+        assert (root / "results_wasserstein.csv").exists()
+
+        # Для каждого входного файла должна быть создана собственная папка с CSV
+        for i in range(3):
+            subdir = root / f"test_data_{i}"
+            assert subdir.is_dir()
+            assert (subdir / f"test_data_{i}.csv").exists()
 
 
 class TestPipelineWithRealData:

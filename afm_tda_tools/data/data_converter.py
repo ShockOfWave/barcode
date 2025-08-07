@@ -78,7 +78,8 @@ def txt_to_csv_folder(
         df.insert(0, "DataLine", range(len(df)))
         df.columns = ["DataLine"] + [f"Pos = {i}" for i in range(df.shape[1] - 1)]
 
-        # Create output directory and save CSV directly under processed path
+        # Create a dedicated subdirectory for each file and save CSV there
         stem = txt_file.stem
-        proc.mkdir(exist_ok=True)
-        df.to_csv(proc / f"{stem}.csv", index=False)
+        out_dir = proc / stem
+        out_dir.mkdir(exist_ok=True)
+        df.to_csv(out_dir / f"{stem}.csv", index=False)

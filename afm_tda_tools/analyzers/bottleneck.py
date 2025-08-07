@@ -176,9 +176,9 @@ class BottleneckAnalyzer(Analyzer):
         persistence_analyzer: Optional[object] = None,
         delta: float = 0.01,
         order: float = 1.0,
+        save_path: Optional[str] = None,
     ) -> None:
-        """
-        Compute distance matrices for CLI and save to disk.
+        """Compute distance matrices for CLI and save to disk.
 
         Parameters
         ----------
@@ -191,6 +191,9 @@ class BottleneckAnalyzer(Analyzer):
             Tolerance parameter for the bottleneck distance.
         order : float, optional
             Order parameter for the Wasserstein distance.
+        save_path : str, optional
+            Directory where the resulting CSV files will be written. If
+            not provided, the directory of the first dataset is used.
         """
         # if there are no datasets to analyse, simply return
         if not datasets:
@@ -200,8 +203,9 @@ class BottleneckAnalyzer(Analyzer):
         if persistence_analyzer is not None:
             diagrams = persistence_analyzer.data.persistence_diagrams
         bn_df, ws_df = self.compute(datasets, diagrams=diagrams, delta=delta, order=order)
-        # save to disk using the directory of the first dataset
-        self.save_results(os.path.dirname(datasets[0]), bn_df, ws_df)
+        # save to disk using the provided path or the directory of the first dataset
+        save_dir = save_path if save_path is not None else os.path.dirname(datasets[0])
+        self.save_results(save_dir, bn_df, ws_df)
 
     # -- save --------------------------------------------------------------
     def save_results(self, save_path: str, bn_df: pd.DataFrame, ws_df: pd.DataFrame) -> None:
